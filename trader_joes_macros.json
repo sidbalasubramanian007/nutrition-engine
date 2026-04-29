@@ -1,0 +1,122 @@
+[
+    {
+        "name": "Brioche Style Pancakes",
+        "calories": 220,
+        "protein": 5,
+        "carbs": 35,
+        "fat": 10,
+        "fiber": 2
+    },
+    {
+        "name": "Lefse Norwegian Potato Flatbread",
+        "calories": 130,
+        "protein": 3,
+        "carbs": 25,
+        "fat": 3,
+        "fiber": 1
+    },
+    {
+        "name": "Strawberry Brioche Style Liège Waffles",
+        "calories": 280,
+        "protein": 6,
+        "carbs": 40,
+        "fat": 15,
+        "fiber": 2
+    },
+    {
+        "name": "Lemon Poppy Seed Muffins",
+        "calories": 450,
+        "protein": 7,
+        "carbs": 58,
+        "fat": 25,
+        "fiber": 2
+    },
+    {
+        "name": "Earl Grey Blondie Bars",
+        "calories": 220,
+        "protein": 4,
+        "carbs": 30,
+        "fat": 12,
+        "fiber": 1
+    },
+    {
+        "name": "Organic Flour Tortillas",
+        "calories": 130,
+        "protein": 3,
+        "carbs": 22,
+        "fat": 3,
+        "fiber": 1
+    },
+    {
+        "name": "Garlic & Cheese Bread Sticks",
+        "calories": 140,
+        "protein": 5,
+        "carbs": 18,
+        "fat": 6,
+        "fiber": 1
+    },
+    {
+        "name": "Chocolate Chip Muffins",
+        "calories": 480,
+        "protein": 7,
+        "carbs": 65,
+        "fat": 28,
+        "fiber": 2
+    },
+    {
+        "name": "Glazed Vanilla Bean Scones",
+        "calories": 400,
+        "protein": 6,
+        "carbs": 52,
+        "fat": 20,
+        "fiber": 2
+    },
+    {
+        "name": "Red Velvet Cupcakes",
+        "calories": 350,
+        "protein": 4,
+        "carbs": 48,
+        "fat": 20,
+        "fiber": 1
+    },
+    {
+        "name": "Sliced Double Chocolate Brioche",
+        "calories": 180,
+        "protein": 5,
+        "carbs": 25,
+        "fat": 10,
+        "fiber": 1
+    },
+    {
+        "name": "Toasted Coconut Mini Sheet Cake",
+        "calories": 300,
+        "protein": 3,
+        "carbs": 38,
+        "fat": 18,
+        "fiber": 1
+    },
+    {
+        "name": "Sprouted Wheat Multigrain Bread",
+        "calories": 110,
+        "protein": 5,
+        "carbs": 18,
+        "fat": 2,
+        "fiber": 4
+    },
+    {
+        "name": "For the Love of Chocolate Mousse Cake",
+        "calories": 400,
+        "protein": 5,
+        "carbs": 48,
+        "fat": 25,
+        "fiber": 2
+    },
+    {
+        "name": "Soft Pretzel Stick",
+        "calories": 180,
+        "protein": 6,
+        "carbs": 35,
+        "fat": 2,
+        "fiber": 1
+    }
+]

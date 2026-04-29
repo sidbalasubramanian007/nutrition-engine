@@ -1,4 +1,15 @@
+# Python
 venv/
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# System
 .DS_Store
+.vscode/
+.idea/
+
+# Environment/DB
 .env
+nutrition_db/
