@@ -38,3 +38,16 @@ def estimate_protein(weight_lbs, goal):
         protein = weight_lbs * 1.2 # Higher protein spares muscle in deficits
         
     return int(protein)
+
+
+def estimate_fat_and_carbs(total_calories, protein_g):
+    """
+    Derives fat and carb targets from total calories and protein.
+    Allocates 30% of remaining (non-protein) calories to fat,
+    and 70% to carbs — consistent with a performance/bulk macro split.
+    """
+    protein_calories  = protein_g * 4
+    remaining         = total_calories - protein_calories
+    fat_g   = int((remaining * 0.30) / 9)
+    carbs_g = int((remaining * 0.70) / 4)
+    return fat_g, carbs_g
