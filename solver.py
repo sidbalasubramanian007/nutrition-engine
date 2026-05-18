@@ -1,6 +1,36 @@
 import psycopg2
 import random
 
+# Maps each food (by name) to the meal slots it belongs in.
+# Foods not listed here are flexible and can appear in any slot.
+MEAL_SLOT_MAP = {
+    # Breakfast-appropriate
+    "Rolled Oats":               ["breakfast"],
+    "Bananas":                   ["breakfast", "snack"],
+    "0% Greek Yogurt":           ["breakfast", "snack"],
+    "Nonfat Plain Greek Yogurt": ["breakfast", "snack"],
+    "Egg Whites":                ["breakfast"],
+    "Whey Protein Powder":       ["breakfast", "snack"],
+    # Lunch/Dinner carbs
+    "Jasmine Rice":              ["lunch", "dinner"],
+    "Sweet Potato":              ["lunch", "dinner"],
+    "Quinoa":                    ["lunch", "dinner"],
+    "Brown Rice":                ["lunch", "dinner"],
+    # Lunch/Dinner proteins
+    "Chicken Breast":            ["lunch", "dinner"],
+    "Organic Boneless Skinless Chicken Breast": ["lunch", "dinner"],
+    "Wild Sockeye Salmon":       ["dinner"],
+    "Lean Ground Turkey":        ["lunch", "dinner"],
+    "Organic Firm Tofu":         ["lunch", "dinner"],
+    "Sirloin Steak":             ["dinner"],
+    "Cod Fillet":                ["lunch", "dinner"],
+    "Shrimp":                    ["lunch", "dinner"],
+    # Snacks / fats
+    "Avocado":                   ["lunch", "dinner"],
+    "Almonds":                   ["snack"],
+}
+
+
 def load_food_data():
     """Connects to Postgres and loads categorized items with serving limits."""
     print("Step 1: Connecting to PostgreSQL database...")
@@ -30,54 +60,95 @@ def load_food_data():
         return None
 
 
+def foods_for_slot(pool, slot):
+    """Filter a food pool to items that belong in the given meal slot."""
+    return [f for f in pool if slot in MEAL_SLOT_MAP.get(f['name'], [slot])]
+
+
+def pick_unique(pool, used_names):
+    """Pick a random food from pool that hasn't been used today yet."""
+    available = [f for f in pool if f['name'] not in used_names]
+    return random.choice(available) if available else None
+
+
 def build_meal_plan(foods, target_calories, target_protein, target_carbs, target_fat):
     """
-    Builds a structured daily meal plan with 4 meal slots.
-    Assigns proteins to protein slots and staples to carb slots so
-    every generated plan actually resembles a real day of eating.
+    Builds a structured daily meal plan:
+      Breakfast — carb (oats etc.) + protein (eggs/yogurt/whey)
+      Lunch     — protein (chicken/turkey/tofu) + carb (rice/potato/quinoa)
+      Dinner    — protein (salmon/steak/shrimp) + carb (different from lunch)
+      Snack     — protein or light item (almonds, banana, etc.)
 
-    Meal template:
-      Breakfast — carb-focused staple (oats, banana, rice, etc.)
-      Lunch     — protein + carb
-      Dinner    — protein + carb
-      Snack     — protein (shake, yogurt, etc.)
+    Each food item is capped at 3 servings to prevent absurd quantities.
+    All foods are unique within a day (no repeats across meals).
     """
     proteins = [f for f in foods if f['category'] == 'lean_protein']
     staples  = [f for f in foods if f['category'] == 'staple']
 
-    if len(proteins) < 2 or len(staples) < 2:
+    # Slot-filtered pools
+    bfast_carbs  = foods_for_slot(staples,  'breakfast')
+    bfast_prots  = foods_for_slot(proteins, 'breakfast')
+    lunch_prots  = foods_for_slot(proteins, 'lunch')
+    dinner_prots = foods_for_slot(proteins, 'dinner')
+    meal_carbs   = foods_for_slot(staples,  'lunch')
+    snack_pool   = foods_for_slot(foods,    'snack')
+
+    # Can't build a valid day without these
+    if not bfast_carbs or not lunch_prots or not dinner_prots or not meal_carbs:
         return None
 
-    # Pick unique foods for each slot so we don't repeat the same item twice
-    chosen_proteins = random.sample(proteins, min(3, len(proteins)))
-    chosen_staples  = random.sample(staples,  min(3, len(staples)))
+    # Pick unique foods for each slot — no food repeats across meals
+    used = []
+
+    b_carb = pick_unique(bfast_carbs, used)
+    if b_carb: used.append(b_carb['name'])
+
+    b_prot = pick_unique(bfast_prots, used)
+    if b_prot: used.append(b_prot['name'])
+
+    l_prot = pick_unique(lunch_prots, used)
+    if l_prot: used.append(l_prot['name'])
+
+    l_carb = pick_unique(meal_carbs, used)
+    if l_carb: used.append(l_carb['name'])
+
+    d_prot = pick_unique(dinner_prots, used)
+    if d_prot: used.append(d_prot['name'])
+
+    d_carb = pick_unique(meal_carbs, used)
+    if d_carb: used.append(d_carb['name'])
+
+    snack = pick_unique(snack_pool, used)
 
     meal_assignments = [
-        ("Breakfast", [chosen_staples[0]]),
-        ("Lunch",     [chosen_proteins[0], chosen_staples[1]]),
-        ("Dinner",    [chosen_proteins[1], chosen_staples[2] if len(chosen_staples) > 2 else chosen_staples[0]]),
-        ("Snack",     [chosen_proteins[2] if len(chosen_proteins) > 2 else chosen_proteins[0]]),
+        ("Breakfast", [f for f in [b_carb, b_prot] if f]),
+        ("Lunch",     [f for f in [l_prot, l_carb] if f]),
+        ("Dinner",    [f for f in [d_prot, d_carb] if f]),
+        ("Snack",     [f for f in [snack]          if f]),
     ]
+    # Drop empty meal slots
+    meal_assignments = [(m, items) for m, items in meal_assignments if items]
 
-    items  = []
+    result_items = []
     totals = {"calories": 0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "fiber": 0.0}
 
     for meal_name, meal_foods in meal_assignments:
         for food in meal_foods:
-            servings = random.randint(1, min(food['max_servings'], 4))
+            # Cap at 3 servings per item — keeps portions realistic
+            servings = random.randint(1, min(food['max_servings'], 3))
             totals["calories"] += food["calories"] * servings
             totals["protein"]  += food["protein"]  * servings
             totals["carbs"]    += food["carbs"]    * servings
             totals["fat"]      += food["fat"]      * servings
             totals["fiber"]    += food["fiber"]    * servings
-            items.append({
+            result_items.append({
                 "name":     food["name"],
                 "servings": servings,
                 "category": food["category"],
                 "meal":     meal_name,
             })
 
-    # Penalize deviation from ALL four macro targets, not just cal + protein
+    # Penalize deviation from ALL four macro targets
     penalty = (
         abs(totals["calories"] - target_calories) * 10 +
         abs(totals["protein"]  - target_protein)  * 15 +
@@ -87,7 +158,7 @@ def build_meal_plan(foods, target_calories, target_protein, target_carbs, target
     )
 
     totals["fiber"] = round(totals["fiber"], 1)
-    return {"items": items, "macros": totals, "penalty": penalty}
+    return {"items": result_items, "macros": totals, "penalty": penalty}
 
 
 def run_heuristic_solver(foods, target_calories=2800, target_protein=170,
