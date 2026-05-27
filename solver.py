@@ -4,28 +4,31 @@ import random
 # Maps each food (by name) to the meal slots it belongs in.
 # Foods not listed here are flexible and can appear in any slot.
 MEAL_SLOT_MAP = {
-    # Breakfast-appropriate
+    # Breakfast only
     "Rolled Oats":               ["breakfast"],
+    "Egg Whites":                ["breakfast"],
+    # Breakfast + snack
     "Bananas":                   ["breakfast", "snack"],
     "0% Greek Yogurt":           ["breakfast", "snack"],
     "Nonfat Plain Greek Yogurt": ["breakfast", "snack"],
-    "Egg Whites":                ["breakfast"],
     "Whey Protein Powder":       ["breakfast", "snack"],
     # Lunch/Dinner carbs
     "Jasmine Rice":              ["lunch", "dinner"],
     "Sweet Potato":              ["lunch", "dinner"],
     "Quinoa":                    ["lunch", "dinner"],
     "Brown Rice":                ["lunch", "dinner"],
-    # Lunch/Dinner proteins
+    # Lunch/Dinner proteins — ALL proteins must be listed here explicitly
+    # so nothing leaks into breakfast by falling through the default
     "Chicken Breast":            ["lunch", "dinner"],
     "Organic Boneless Skinless Chicken Breast": ["lunch", "dinner"],
     "Wild Sockeye Salmon":       ["dinner"],
     "Lean Ground Turkey":        ["lunch", "dinner"],
+    "Lean Ground Turkey (93/7)": ["lunch", "dinner"],
     "Organic Firm Tofu":         ["lunch", "dinner"],
     "Sirloin Steak":             ["dinner"],
     "Cod Fillet":                ["lunch", "dinner"],
     "Shrimp":                    ["lunch", "dinner"],
-    # Snacks / fats
+    # Fats / sides
     "Avocado":                   ["lunch", "dinner"],
     "Almonds":                   ["snack"],
 }
@@ -61,8 +64,24 @@ def load_food_data():
 
 
 def foods_for_slot(pool, slot):
-    """Filter a food pool to items that belong in the given meal slot."""
-    return [f for f in pool if slot in MEAL_SLOT_MAP.get(f['name'], [slot])]
+    """
+    Filter a food pool to items that belong in the given meal slot.
+    Proteins not explicitly listed in MEAL_SLOT_MAP default to lunch/dinner only
+    so unmapped meats never leak into breakfast.
+    """
+    result = []
+    for f in pool:
+        if f['name'] in MEAL_SLOT_MAP:
+            if slot in MEAL_SLOT_MAP[f['name']]:
+                result.append(f)
+        else:
+            # Safe default: unmapped proteins → lunch/dinner only
+            if f['category'] == 'lean_protein':
+                if slot in ['lunch', 'dinner']:
+                    result.append(f)
+            else:
+                result.append(f)
+    return result
 
 
 def pick_unique(pool, used_names):
@@ -118,13 +137,16 @@ def build_meal_plan(foods, target_calories, target_protein, target_carbs, target
     d_carb = pick_unique(meal_carbs, used)
     if d_carb: used.append(d_carb['name'])
 
-    snack = pick_unique(snack_pool, used)
+    # Snack: pick up to 2 items (e.g. Almonds + Banana, or Whey + Banana)
+    snack1 = pick_unique(snack_pool, used)
+    if snack1: used.append(snack1['name'])
+    snack2 = pick_unique(snack_pool, used)
 
     meal_assignments = [
-        ("Breakfast", [f for f in [b_carb, b_prot] if f]),
-        ("Lunch",     [f for f in [l_prot, l_carb] if f]),
-        ("Dinner",    [f for f in [d_prot, d_carb] if f]),
-        ("Snack",     [f for f in [snack]          if f]),
+        ("Breakfast", [f for f in [b_carb, b_prot]    if f]),
+        ("Lunch",     [f for f in [l_prot, l_carb]    if f]),
+        ("Dinner",    [f for f in [d_prot, d_carb]    if f]),
+        ("Snack",     [f for f in [snack1, snack2]    if f]),
     ]
     # Drop empty meal slots
     meal_assignments = [(m, items) for m, items in meal_assignments if items]
@@ -134,8 +156,10 @@ def build_meal_plan(foods, target_calories, target_protein, target_carbs, target
 
     for meal_name, meal_foods in meal_assignments:
         for food in meal_foods:
-            # Cap at 3 servings per item — keeps portions realistic
-            servings = random.randint(1, min(food['max_servings'], 3))
+            # Snacks are single-portion — cap at 1 serving
+            # Main meals cap at 3 servings
+            max_s    = 1 if meal_name == "Snack" else min(food['max_servings'], 3)
+            servings = random.randint(1, max_s)
             totals["calories"] += food["calories"] * servings
             totals["protein"]  += food["protein"]  * servings
             totals["carbs"]    += food["carbs"]    * servings
