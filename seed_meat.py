@@ -1,4 +1,4 @@
-import psycopg2
+import db
 
 def seed_database():
     lean_proteins = [
@@ -10,7 +10,7 @@ def seed_database():
     ]
 
     try:
-        conn = psycopg2.connect(dbname="nutrition_db", host="localhost")
+        conn = db.get_connection()
         cursor = conn.cursor()
 
         insert_query = """

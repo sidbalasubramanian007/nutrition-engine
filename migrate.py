@@ -1,19 +1,10 @@
-import os
 import json
-import psycopg2
-from dotenv import load_dotenv
-
-# Load variables if you want to store DB credentials there later
-load_dotenv()
+import db
 
 def migrate_data():
-    # 1. Connect to your local PostgreSQL database
-    # By default, Postgres uses your Mac's username as the default user
+    # 1. Connect to the PostgreSQL database (see db.py for env-configured settings)
     try:
-        conn = psycopg2.connect(
-            dbname="nutrition_db",
-            host="localhost"
-        )
+        conn = db.get_connection()
         cursor = conn.cursor()
         print("Connected to PostgreSQL successfully.")
     except Exception as e:

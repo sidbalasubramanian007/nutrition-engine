@@ -1,4 +1,4 @@
-import psycopg2
+import db
 
 def seed_carbs():
     # Adding high-quality, unprocessed staples
@@ -10,7 +10,7 @@ def seed_carbs():
         ("Bananas", 105, 1, 27, 0, 3.0, 'staple', 5),
     ]
 
-    conn = psycopg2.connect(dbname="nutrition_db", host="localhost")
+    conn = db.get_connection()
     cursor = conn.cursor()
     
     insert_query = """

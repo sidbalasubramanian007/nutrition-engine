@@ -1,7 +1,7 @@
-import psycopg2
+import db
 
 def migrate():
-    conn = psycopg2.connect(dbname="nutrition_db", host="localhost")
+    conn = db.get_connection()
     cursor = conn.cursor()
     
     # 1. Add the column

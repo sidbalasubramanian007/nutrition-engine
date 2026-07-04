@@ -1,4 +1,4 @@
-import psycopg2
+import db
 
 def seed_elite():
     # Elite clean sources: High protein, low processing
@@ -12,7 +12,7 @@ def seed_elite():
         ("Shrimp", 100, 20, 0, 1, 0.0, 'lean_protein', 4)
     ]
 
-    conn = psycopg2.connect(dbname="nutrition_db", host="localhost")
+    conn = db.get_connection()
     cursor = conn.cursor()
     
     insert_query = """

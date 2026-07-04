@@ -1,8 +1,8 @@
-import psycopg2
+import db
 
 def inspect_database():
     try:
-        conn = psycopg2.connect(dbname="nutrition_db", host="localhost")
+        conn = db.get_connection()
         cursor = conn.cursor()
         
         # Query all items and sort them by protein (highest to lowest)

@@ -1,5 +1,5 @@
-import psycopg2
 import random
+import db
 
 # Maps each food (by name) to the meal slots it belongs in.
 # Foods not listed here are flexible and can appear in any slot.
@@ -38,7 +38,7 @@ def load_food_data():
     """Connects to Postgres and loads categorized items with serving limits."""
     print("Step 1: Connecting to PostgreSQL database...")
     try:
-        conn = psycopg2.connect(dbname="nutrition_db", host="localhost")
+        conn = db.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT name, calories, protein, carbs, fat, fiber, category, max_servings FROM products;")
         rows = cursor.fetchall()

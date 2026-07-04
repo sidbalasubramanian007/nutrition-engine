@@ -1,9 +1,9 @@
-import psycopg2
+import db
 
 def apply_tags():
     print("Step 1: Connecting to database to apply schema update...")
     try:
-        conn = psycopg2.connect(dbname="nutrition_db", host="localhost")
+        conn = db.get_connection()
         cursor = conn.cursor()
 
         # 1. Alter the table to add a category column (defaulting everything to 'misc')

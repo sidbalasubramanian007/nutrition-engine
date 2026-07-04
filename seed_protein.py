@@ -1,4 +1,4 @@
-import psycopg2
+import db
 
 def seed_protein():
     # More diverse options for the engine to choose from
@@ -12,7 +12,7 @@ def seed_protein():
         ("Organic Firm Tofu", 130, 14, 3, 7, 2.0, 'lean_protein', 4)
     ]
 
-    conn = psycopg2.connect(dbname="nutrition_db", host="localhost")
+    conn = db.get_connection()
     cursor = conn.cursor()
     
     insert_query = """
