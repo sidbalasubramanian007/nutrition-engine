@@ -34,12 +34,15 @@ See `requirements.txt` for pinned versions.
 | `calculator.py` | TDEE (Mifflin-St Jeor) and macro-target math: BMR → TDEE by activity level → goal adjustment, protein estimate by bodyweight/goal, and fat/carb split from remaining calories. |
 | `solver.py` | The heuristic meal-plan solver: `MEAL_SLOT_MAP`, structured plan construction, serving-size selection, four-macro penalty scoring, and the iteration loop that picks the best plan. |
 | `scraper.py` | Scrapes a Trader Joe's category page with Playwright/BeautifulSoup, then calls the Gemini API to estimate nutrition macros for each item and writes `trader_joes_macros.json`. |
-| `migrate.py` | Creates the `products` table (if it doesn't exist) and loads `trader_joes_macros.json` into it. |
-| `tag_data.py` | Adds a `category` column and tags existing rows (`bakery`, `lean_protein`, or default `misc`) based on keyword matches in the product name. |
-| `migrate_limits.py` | Adds a `max_servings` column (default 3) and backfills existing rows. |
-| `seed_protein.py`, `seed_carbs.py`, `seed_meat.py`, `seed_elite.py` | Hand-seed curated staple items (proteins, carb staples, additional lean proteins/sides) directly into `products`, independent of the scraper. |
-| `check_db.py` | Utility script — prints all products in the DB sorted by protein, descending. |
+| `db.py` | Shared `get_connection()` helper — opens the Postgres connection using `DB_NAME`/`DB_HOST` env vars (with local defaults), used by every script below and by `solver.py`. |
 | `test_ai.py` | Smoke test for the Gemini API connection/`.env` setup. |
+| `scripts/migrate.py` | Creates the `products` table (if it doesn't exist) and loads `trader_joes_macros.json` into it. |
+| `scripts/tag_data.py` | Adds a `category` column and tags existing rows (`bakery`, `lean_protein`, or default `misc`) based on keyword matches in the product name. |
+| `scripts/migrate_limits.py` | Adds a `max_servings` column (default 3) and backfills existing rows. |
+| `scripts/seed_protein.py`, `scripts/seed_carbs.py`, `scripts/seed_meat.py`, `scripts/seed_elite.py` | Hand-seed curated staple items (proteins, carb staples, additional lean proteins/sides) directly into `products`, independent of the scraper. |
+| `scripts/check_db.py` | Utility script — prints all products in the DB sorted by protein, descending. |
+
+`app.py`, `calculator.py`, `solver.py`, `scraper.py`, and `db.py` are the core application modules and stay at the repo root. Everything in `scripts/` is a one-off migration/seed/inspection script, run manually during setup — each adjusts `sys.path` to import `db` from the parent directory.
 
 ## Setup
 
@@ -53,15 +56,17 @@ pip install -r requirements.txt
 
 ### 2. Environment variables
 
-Only the Gemini API key is read from the environment (via `python-dotenv`). The Postgres connection itself is hardcoded to `dbname="nutrition_db", host="localhost"` and relies on your local Postgres trusting your OS user — no DB credentials are read from `.env` currently.
+`db.py`'s `get_connection()` reads `DB_NAME`/`DB_HOST` from the environment (via `python-dotenv`), falling back to `nutrition_db`/`localhost` if unset — so a `.env` file is only needed to point at a non-local database, or to supply the Gemini key.
 
-Create a `.env` file in the repo root:
+Create a `.env` file in the repo root (see `.env.example`):
 
 ```
 GEMINI_API_KEY=your-gemini-api-key-here
+DB_HOST=localhost
+DB_NAME=nutrition_db
 ```
 
-`GEMINI_API_KEY` is only required to run `scraper.py` or `test_ai.py`. It is not needed to run the Streamlit app itself once the database is populated.
+`GEMINI_API_KEY` is only required to run `scraper.py` or `test_ai.py`. `DB_HOST`/`DB_NAME` can be omitted entirely for local development — the defaults just work.
 
 ### 3. Database setup
 
@@ -71,34 +76,34 @@ Requires a local PostgreSQL instance.
 createdb nutrition_db
 ```
 
-Then, with the venv active, run the migration and seed scripts **in this order**:
+Then, with the venv active and from the repo root, run the migration and seed scripts **in this order**:
 
 ```bash
 # (Optional) scrape fresh product data — requires GEMINI_API_KEY
 python scraper.py
 
 # Create the products table and load scraper output (if trader_joes_macros.json exists)
-python migrate.py
+python scripts/migrate.py
 
 # Add curated meat items (no category/max_servings yet)
-python seed_meat.py
+python scripts/seed_meat.py
 
 # Add category column and tag all rows (bakery / lean_protein / misc)
-python tag_data.py
+python scripts/tag_data.py
 
 # Add max_servings column and backfill defaults
-python migrate_limits.py
+python scripts/migrate_limits.py
 
 # Add remaining curated staples with explicit category + max_servings
-python seed_protein.py
-python seed_carbs.py
-python seed_elite.py
+python scripts/seed_protein.py
+python scripts/seed_carbs.py
+python scripts/seed_elite.py
 ```
 
 You can sanity-check the loaded data at any point with:
 
 ```bash
-python check_db.py
+python scripts/check_db.py
 ```
 
 ## Running the app
