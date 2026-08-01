@@ -76,9 +76,8 @@ def test_estimate_fat_and_carbs_zero_calories_and_protein():
     assert calculator.estimate_fat_and_carbs(0, 0) == (0, 0)
 
 
-def test_estimate_fat_and_carbs_protein_calories_exceed_total_goes_negative():
-    # KNOWN BUG (not fixed here, flagged in the review): when protein_g*4 > total_calories,
-    # "remaining" goes negative and fat/carbs come out negative instead of being floored at 0.
-    # This documents the current behavior so a future fix shows up as an intentional test change.
+def test_estimate_fat_and_carbs_protein_calories_exceed_total_floors_at_zero():
+    # When protein_g*4 > total_calories, "remaining" is floored at 0 instead of going
+    # negative, so fat/carbs come out (0, 0) rather than negative.
     fat_g, carbs_g = calculator.estimate_fat_and_carbs(100, 100)
-    assert (fat_g, carbs_g) == (-10, -52)
+    assert (fat_g, carbs_g) == (0, 0)
