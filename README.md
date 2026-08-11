@@ -1,5 +1,7 @@
 # Nutrition Engine (Macro-Tracker)
 
+[![Tests](https://github.com/sidbalasubramanian007/nutrition-engine/actions/workflows/tests.yml/badge.svg)](https://github.com/sidbalasubramanian007/nutrition-engine/actions/workflows/tests.yml)
+
 A Streamlit app that builds a full daily meal plan from real grocery product data — currently Trader Joe's items — matched against strict, user-defined macro targets (calories, protein, carbs, fat). Instead of pulling from a generic recipe database, it works off actual product nutrition data and searches for the combination of real items that best hits your numbers.
 
 ## How it works
