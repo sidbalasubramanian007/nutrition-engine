@@ -5,6 +5,36 @@ import pytest
 import solver
 
 
+# --- rows_to_foods ---
+
+def test_rows_to_foods_transforms_rows_matching_the_products_query_shape():
+    # Column order matches fetch_products_rows()'s SELECT:
+    # name, calories, protein, carbs, fat, fiber, category, max_servings
+    rows = [
+        ("Chicken Breast", 110, 23, 0, 2, 0.0, "lean_protein", 6),
+        ("Jasmine Rice", 200, 4, 45, 0, 1.0, "staple", 10),
+    ]
+    assert solver.rows_to_foods(rows) == [
+        {"name": "Chicken Breast", "calories": 110, "protein": 23, "carbs": 0, "fat": 2,
+         "fiber": 0.0, "category": "lean_protein", "max_servings": 6},
+        {"name": "Jasmine Rice", "calories": 200, "protein": 4, "carbs": 45, "fat": 0,
+         "fiber": 1.0, "category": "staple", "max_servings": 10},
+    ]
+
+
+def test_rows_to_foods_coerces_fiber_to_float():
+    # fiber is stored as Postgres FLOAT but psycopg2 can hand back int-like values
+    # (e.g. whole-number fiber); rows_to_foods explicitly coerces it to float.
+    rows = [("Egg Whites", 50, 11, 0, 0, 0, "lean_protein", 8)]
+    foods = solver.rows_to_foods(rows)
+    assert foods[0]["fiber"] == 0.0
+    assert isinstance(foods[0]["fiber"], float)
+
+
+def test_rows_to_foods_empty_input_returns_empty_list():
+    assert solver.rows_to_foods([]) == []
+
+
 # --- foods_for_slot ---
 
 def test_foods_for_slot_respects_explicit_meal_slot_map():

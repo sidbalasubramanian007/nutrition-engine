@@ -34,28 +34,40 @@ MEAL_SLOT_MAP = {
 }
 
 
+def fetch_products_rows():
+    """Runs the products query against Postgres and returns the raw rows."""
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, calories, protein, carbs, fat, fiber, category, max_servings FROM products;")
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def rows_to_foods(rows):
+    """Transforms raw product rows into the food dicts used by the solver."""
+    foods = []
+    for row in rows:
+        foods.append({
+            "name":         row[0],
+            "calories":     row[1],
+            "protein":      row[2],
+            "carbs":        row[3],
+            "fat":          row[4],
+            "fiber":        float(row[5]),
+            "category":     row[6],
+            "max_servings": row[7]
+        })
+    return foods
+
+
 def load_food_data():
     """Connects to Postgres and loads categorized items with serving limits."""
     print("Step 1: Connecting to PostgreSQL database...")
     try:
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT name, calories, protein, carbs, fat, fiber, category, max_servings FROM products;")
-        rows = cursor.fetchall()
-        foods = []
-        for row in rows:
-            foods.append({
-                "name":         row[0],
-                "calories":     row[1],
-                "protein":      row[2],
-                "carbs":        row[3],
-                "fat":          row[4],
-                "fiber":        float(row[5]),
-                "category":     row[6],
-                "max_servings": row[7]
-            })
-        cursor.close()
-        conn.close()
+        rows = fetch_products_rows()
+        foods = rows_to_foods(rows)
         print(f"-> Successfully loaded {len(foods)} categorized items from the database.")
         return foods
     except Exception as e:
