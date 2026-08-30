@@ -1,0 +1,15 @@
+Name,Calories,Protein,Carbs,Fat,Fiber,Category,Max_Servings,Location
+Chicken Breast,165,31,0,3.6,0,lean_protein,3,Grocery
+Jasmine Rice,205,4,45,0,1,staple,4,Grocery
+Rolled Oats,150,5,27,2.5,4,staple,3,Grocery
+Egg Whites,125,26,2,0,0,lean_protein,2,Grocery
+Almonds,160,6,6,14,3.5,fat,2,Grocery
+Bananas,105,1,27,0,3,carb,2,Grocery
+Chipotle Chicken,180,32,0,7,0,lean_protein,2,Chipotle
+Chipotle Steak,150,21,1,6,0,lean_protein,2,Chipotle
+Chipotle White Rice,210,4,40,4,1,staple,2,Chipotle
+Chipotle Black Beans,130,8,22,1.5,7,carb,2,Chipotle
+Chipotle Guacamole,230,2,8,22,6,fat,1,Chipotle
+CAVA Harissa Honey Chicken,245,22,11,12,1,lean_protein,2,CAVA
+CAVA Saffron Basmati Rice,180,4,30,5,0,staple,2,CAVA
+CAVA Crazy Feta,130,4,3,12,0,fat,1,CAVA

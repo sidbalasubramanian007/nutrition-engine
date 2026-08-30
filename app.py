@@ -1,9 +1,29 @@
 import streamlit as st
 import solver
 import calculator
+import os
+import psycopg2
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # 1. SETUP - Must be the first Streamlit command
 st.set_page_config(page_title="Nutrition Engine", layout="wide")
+
+# 🚨 DIRECT DATABASE TEST TO EXPOSE THE REAL ERROR 🚨
+try:
+    conn = psycopg2.connect(
+        host=os.getenv("DB_HOST", "localhost"),
+        port=os.getenv("DB_PORT", 5432),
+        database=os.getenv("DB_NAME", "nutrition_db"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD", "")
+    )
+    conn.close()
+except Exception as e:
+    st.error(f"🚨 REAL DATABASE ERROR: {e}")
+    st.warning("If the error says 'FATAL: role \"None\" does not exist', Python is not finding your .env file.")
+    st.stop() # Stops the rest of the app from running so you can read the error
 
 # 2. STATE MANAGEMENT - Initialize all four macro targets
 if 'target_cal'   not in st.session_state: st.session_state.target_cal   = 2800
@@ -40,11 +60,23 @@ target_cal   = st.sidebar.slider("Target Calories",    1500, 4000, st.session_st
 target_prot  = st.sidebar.slider("Target Protein (g)",   50,  250, st.session_state.target_prot)
 target_carbs = st.sidebar.slider("Target Carbs (g)",     50,  600, st.session_state.target_carbs)
 target_fat   = st.sidebar.slider("Target Fat (g)",       20,  150, st.session_state.target_fat)
+# Add this right below the target_fat slider in your sidebar:
+st.sidebar.markdown("---")
+st.sidebar.header("Dining Options")
+selected_restaurant = st.sidebar.selectbox("Include Restaurant", ["Any", "Chipotle", "CAVA", "Grocery Only"])
+
+# Map 'Grocery Only' to a string that forces the solver to drop all chains
+if selected_restaurant == "Grocery Only":
+    db_filter = "Grocery"
+else:
+    db_filter = selected_restaurant
 
 # 5. MAIN CONTENT - The Solver
 if st.button("Generate Optimal Plan"):
     with st.spinner("Calculating optimal meal plan..."):
-        food_db = solver.load_food_data()
+        # Pass the filter into the loader!
+        food_db = solver.load_food_data(db_filter)
+        
         if food_db:
             winner = solver.run_heuristic_solver(
                 food_db,
@@ -80,4 +112,4 @@ if st.button("Generate Optimal Plan"):
             else:
                 st.error("No valid meal plan found with current constraints.")
         else:
-            st.error("Database connection failed. Check your PostgreSQL instance!")
+            st.error("The database connected successfully, but solver.load_food_data() returned empty. Check your SQL query in solver.py!")

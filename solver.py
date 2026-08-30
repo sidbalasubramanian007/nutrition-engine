@@ -38,7 +38,8 @@ def fetch_products_rows():
     """Runs the products query against Postgres and returns the raw rows."""
     conn = db.get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT name, calories, protein, carbs, fat, fiber, category, max_servings FROM products;")
+    # ADDED 'location' to the end of the SELECT statement
+    cursor.execute("SELECT name, calories, protein, carbs, fat, fiber, category, max_servings, location FROM products;")
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -51,24 +52,30 @@ def rows_to_foods(rows):
     for row in rows:
         foods.append({
             "name":         row[0],
-            "calories":     row[1],
-            "protein":      row[2],
-            "carbs":        row[3],
-            "fat":          row[4],
+            "calories":     float(row[1]),
+            "protein":      float(row[2]),
+            "carbs":        float(row[3]),
+            "fat":          float(row[4]),
             "fiber":        float(row[5]),
             "category":     row[6],
-            "max_servings": row[7]
+            "max_servings": int(row[7]),
+            "location":     row[8]  # ADDED location mapping
         })
     return foods
 
 
-def load_food_data():
+def load_food_data(restaurant_filter="Any"):
     """Connects to Postgres and loads categorized items with serving limits."""
     print("Step 1: Connecting to PostgreSQL database...")
     try:
         rows = fetch_products_rows()
         foods = rows_to_foods(rows)
-        print(f"-> Successfully loaded {len(foods)} categorized items from the database.")
+        
+        # Filter logic: Keep groceries, plus the selected restaurant (if any)
+        if restaurant_filter != "Any":
+            foods = [f for f in foods if f['location'] == 'Grocery' or f['location'] == restaurant_filter]
+            
+        print(f"-> Successfully loaded {len(foods)} items.")
         return foods
     except Exception as e:
         print(f"Database error: {e}")
@@ -186,11 +193,11 @@ def build_meal_plan(foods, target_calories, target_protein, target_carbs, target
 
     # Penalize deviation from ALL four macro targets
     penalty = (
-        abs(totals["calories"] - target_calories) * 10 +
-        abs(totals["protein"]  - target_protein)  * 15 +
-        abs(totals["carbs"]    - target_carbs)     * 5  +
-        abs(totals["fat"]      - target_fat)       * 8  +
-        max(0, totals["fiber"] - 35) * 100
+    abs(totals["calories"] - target_calories) * 20 +   # Increased from 10
+    abs(totals["protein"]  - target_protein)  * 100 +
+    abs(totals["carbs"]    - target_carbs)    * 20 +   # Increased from 5
+    abs(totals["fat"]      - target_fat)      * 20 +   # Increased from 8
+    max(0, totals["fiber"] - 35) * 50
     )
 
     totals["fiber"] = round(totals["fiber"], 1)
