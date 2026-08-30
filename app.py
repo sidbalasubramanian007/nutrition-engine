@@ -112,52 +112,81 @@ with tab_grocery:
 # TAB 2: EATING OUT (HYBRID)
 # ---------------------------------------------------------
 with tab_restaurant:
-    st.subheader("Restaurant Hybrid Plan")
-    st.caption("Select where you want to eat out. The engine incorporates that restaurant meal and fills the rest of your day with home cooking.")
+    st.subheader("Restaurant Hub")
     
-    col_rest, col_slot = st.columns(2)
-    with col_rest:
-        restaurant = st.selectbox("Select Restaurant", ["Chipotle", "CAVA"])
-    with col_slot:
-        out_meal_slot = st.selectbox("Which meal are you eating out?", ["Lunch", "Dinner"])
+    restaurant = st.selectbox("Select Restaurant", ["Chipotle", "CAVA"], key="rest_select")
+    
+    # Load the foods for the selected restaurant
+    foods = solver.load_food_data(mode="eating_out", restaurant=restaurant)
+    rest_foods = [f for f in foods if f.get('location') == restaurant] if foods else []
+    
+    if not rest_foods:
+        st.error(f"No menu items found for {restaurant} in the database.")
+    else:
+        # Toggle between Calculator and Optimizer
+        mode = st.radio("What do you want to do?", ["Calculate My Order", "Auto-Build Perfect Order"], horizontal=True)
+        st.markdown("---")
         
-    if st.button("Generate Restaurant Hybrid Plan"):
-        with st.spinner(f"Building plan around {restaurant}..."):
-            foods = solver.load_food_data(mode="eating_out", restaurant=restaurant)
+        if mode == "Calculate My Order":
+            st.caption(f"Select your usual {restaurant} ingredients to see the exact macro breakdown.")
             
-            if foods:
-                winner = solver.run_heuristic_solver(
-                    foods, target_cal, target_prot, target_carbs, target_fat,
-                    restaurant=restaurant, 
-                    restaurant_meal=out_meal_slot
-                )
+            food_names = [f['name'] for f in rest_foods]
+            selected_item_names = st.multiselect("What's in your order?", food_names)
+            
+            if selected_item_names:
+                st.markdown("**Adjust Servings (e.g., Double Meat)**")
+                order_totals = {"calories": 0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "fiber": 0.0}
                 
-                if winner:
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.subheader(f"Meal Plan (Includes {restaurant})")
-                        current_meal = None
-                        for item in winner['items']:
-                            if item['meal'] != current_meal:
-                                current_meal = item['meal']
-                                st.markdown(f"**🍽️ {current_meal}**")
-                            
-                            # Highlight restaurant items
-                            is_restaurant_item = restaurant.lower() in item['name'].lower()
-                            tag = f" `[{restaurant.upper()}]`" if is_restaurant_item else f" `[{item['category'].upper()}]`"
-                            st.write(f"  • **{item['servings']}x** {item['name']}{tag}")
-                    with col2:
-                        st.subheader("Macro Breakdown")
-                        st.metric("Calories", f"{winner['macros']['calories']} kcal",
-                                  delta=f"{winner['macros']['calories'] - target_cal:+} vs target")
-                        st.metric("Protein",  f"{winner['macros']['protein']}g",
-                                  delta=f"{winner['macros']['protein'] - target_prot:+.0f}g vs target")
-                        st.metric("Carbs",    f"{winner['macros']['carbs']}g",
-                                  delta=f"{winner['macros']['carbs'] - target_carbs:+.0f}g vs target")
-                        st.metric("Fat",      f"{winner['macros']['fat']}g",
-                                  delta=f"{winner['macros']['fat'] - target_fat:+.0f}g vs target")
-                        st.metric("Fiber",    f"{winner['macros']['fiber']}g")
-                else:
-                    st.error("No valid meal plan found with current constraints.")
-            else:
-                st.error("Database connected successfully, but returned empty data.")
+                col_items, col_macros = st.columns([1.5, 1])
+                
+                with col_items:
+                    for name in selected_item_names:
+                        food = next(f for f in rest_foods if f['name'] == name)
+                        servings = st.number_input(f"{name}", min_value=0.5, max_value=5.0, value=1.0, step=0.5, key=f"serv_{name}")
+                        
+                        order_totals["calories"] += food["calories"] * servings
+                        order_totals["protein"]  += food["protein"]  * servings
+                        order_totals["carbs"]    += food["carbs"]    * servings
+                        order_totals["fat"]      += food["fat"]      * servings
+                        order_totals["fiber"]    += food["fiber"]    * servings
+                        
+                with col_macros:
+                    st.subheader("Order Macros")
+                    st.metric("Calories", f"{order_totals['calories']:.0f} kcal")
+                    st.metric("Protein", f"{order_totals['protein']:.0f}g")
+                    st.metric("Carbs", f"{order_totals['carbs']:.0f}g")
+                    st.metric("Fat", f"{order_totals['fat']:.0f}g")
+                    st.metric("Fiber", f"{order_totals['fiber']:.1f}g")
+
+        else:
+            # The Heuristic Auto-Builder
+            st.caption("Input the macros you have left for the day, and the engine will hack the menu to build the perfect order.")
+            
+            colA, colB, colC, colD = st.columns(4)
+            meal_cal  = colA.number_input("Target Cals", value=int(st.session_state.target_cal / 3), step=50)
+            meal_prot = colB.number_input("Target Protein",  value=int(st.session_state.target_prot / 3), step=5)
+            meal_carb = colC.number_input("Target Carbs",    value=int(st.session_state.target_carbs / 3), step=5)
+            meal_fat  = colD.number_input("Target Fat",      value=int(st.session_state.target_fat / 3), step=5)
+            
+            if st.button("Hack My Menu"):
+                with st.spinner(f"Optimizing {restaurant} menu..."):
+                    winner = solver.run_restaurant_solver(rest_foods, meal_cal, meal_prot, meal_carb, meal_fat)
+                    
+                    if winner:
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.subheader("Your Custom Order")
+                            for item in winner['items']:
+                                st.write(f"  • **{item['servings']}x** {item['name']}")
+                        with col2:
+                            st.subheader("Order Macros")
+                            st.metric("Calories", f"{winner['macros']['calories']} kcal", 
+                                      delta=f"{winner['macros']['calories'] - meal_cal:+} vs target")
+                            st.metric("Protein", f"{winner['macros']['protein']}g", 
+                                      delta=f"{winner['macros']['protein'] - meal_prot:+.0f}g vs target")
+                            st.metric("Carbs", f"{winner['macros']['carbs']}g", 
+                                      delta=f"{winner['macros']['carbs'] - meal_carb:+.0f}g vs target")
+                            st.metric("Fat", f"{winner['macros']['fat']}g", 
+                                      delta=f"{winner['macros']['fat'] - meal_fat:+.0f}g vs target")
+                    else:
+                        st.error("Could not find a valid combination.")

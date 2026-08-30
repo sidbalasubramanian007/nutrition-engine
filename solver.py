@@ -240,3 +240,49 @@ if __name__ == "__main__":
     if food_db:
         winning_plan = run_heuristic_solver(food_db)
         display_meal_plan(winning_plan)
+
+def build_restaurant_order(foods, target_calories, target_protein, target_carbs, target_fat):
+    """Builds a single custom order from a restaurant's ingredient pool."""
+    # Pick 2 to 5 random components (e.g., meat, rice, beans, guac)
+    num_items = random.randint(2, min(5, len(foods)))
+    selected_foods = random.sample(foods, k=num_items)
+    
+    totals = {"calories": 0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "fiber": 0.0}
+    result_items = []
+    
+    for food in selected_foods:
+        # Allow up to 2 servings (e.g., double meat or double rice)
+        servings = random.randint(1, 2) 
+        totals["calories"] += food["calories"] * servings
+        totals["protein"]  += food["protein"]  * servings
+        totals["carbs"]    += food["carbs"]    * servings
+        totals["fat"]      += food["fat"]      * servings
+        totals["fiber"]    += food["fiber"]    * servings
+        
+        result_items.append({
+            "name": food["name"],
+            "servings": servings,
+            "category": food["category"],
+            "meal": "Order"
+        })
+        
+    penalty = (
+        abs(totals["calories"] - target_calories) * 20 +
+        abs(totals["protein"]  - target_protein)  * 100 +
+        abs(totals["carbs"]    - target_carbs)    * 20 +
+        abs(totals["fat"]      - target_fat)      * 20
+    )
+    
+    totals["fiber"] = round(totals["fiber"], 1)
+    return {"items": result_items, "macros": totals, "penalty": penalty}
+
+def run_restaurant_solver(foods, target_calories, target_protein, target_carbs, target_fat, iterations=50000):
+    best, lowest_penalty = None, float("inf")
+    
+    for _ in range(iterations):
+        plan = build_restaurant_order(foods, target_calories, target_protein, target_carbs, target_fat)
+        if plan and plan["penalty"] < lowest_penalty:
+            lowest_penalty = plan["penalty"]
+            best = plan
+            
+    return best
