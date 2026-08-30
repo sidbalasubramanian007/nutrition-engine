@@ -60,56 +60,104 @@ target_cal   = st.sidebar.slider("Target Calories",    1500, 4000, st.session_st
 target_prot  = st.sidebar.slider("Target Protein (g)",   50,  250, st.session_state.target_prot)
 target_carbs = st.sidebar.slider("Target Carbs (g)",     50,  600, st.session_state.target_carbs)
 target_fat   = st.sidebar.slider("Target Fat (g)",       20,  150, st.session_state.target_fat)
-# Add this right below the target_fat slider in your sidebar:
-st.sidebar.markdown("---")
-st.sidebar.header("Dining Options")
-selected_restaurant = st.sidebar.selectbox("Include Restaurant", ["Any", "Chipotle", "CAVA", "Grocery Only"])
 
-# Map 'Grocery Only' to a string that forces the solver to drop all chains
-if selected_restaurant == "Grocery Only":
-    db_filter = "Grocery"
-else:
-    db_filter = selected_restaurant
 
-# 5. MAIN CONTENT - The Solver
-if st.button("Generate Optimal Plan"):
-    with st.spinner("Calculating optimal meal plan..."):
-        # Pass the filter into the loader!
-        food_db = solver.load_food_data(db_filter)
-        
-        if food_db:
-            winner = solver.run_heuristic_solver(
-                food_db,
-                target_calories=target_cal,
-                target_protein=target_prot,
-                target_carbs=target_carbs,
-                target_fat=target_fat,
-            )
+# 5. MAIN CONTENT - TWO DISTINCT MODES
+tab_grocery, tab_restaurant = st.tabs(["🍳 Home Cooking Plan", "🥗 Eating Out Plan"])
 
-            if winner:
-                col1, col2 = st.columns(2)
+# ---------------------------------------------------------
+# TAB 1: HOME COOKING (PURE GROCERY)
+# ---------------------------------------------------------
+with tab_grocery:
+    st.subheader("Home-Cooked Daily Meal Prep")
+    st.caption("Generates a structured daily plan built strictly from standard grocery ingredients.")
+    
+    if st.button("Generate Home Meal Plan"):
+        with st.spinner("Optimizing grocery meal plan..."):
+            foods = solver.load_food_data(mode="grocery")
+            
+            if foods:
+                winner = solver.run_heuristic_solver(
+                    foods, target_cal, target_prot, target_carbs, target_fat
+                )
+                
+                if winner:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.subheader("Meal Plan")
+                        current_meal = None
+                        for item in winner['items']:
+                            if item['meal'] != current_meal:
+                                current_meal = item['meal']
+                                st.markdown(f"**🍽️ {current_meal}**")
+                            st.write(f"  • **{item['servings']}x** {item['name']} `[{item['category'].upper()}]`")
 
-                with col1:
-                    st.subheader("Meal Plan")
-                    current_meal = None
-                    for item in winner['items']:
-                        if item['meal'] != current_meal:
-                            current_meal = item['meal']
-                            st.markdown(f"**🍽️ {current_meal}**")
-                        st.write(f"  • **{item['servings']}x** {item['name']} `[{item['category'].upper()}]`")
-
-                with col2:
-                    st.subheader("Macro Breakdown")
-                    st.metric("Calories", f"{winner['macros']['calories']} kcal",
-                              delta=f"{winner['macros']['calories'] - target_cal:+} vs target")
-                    st.metric("Protein",  f"{winner['macros']['protein']}g",
-                              delta=f"{winner['macros']['protein'] - target_prot:+.0f}g vs target")
-                    st.metric("Carbs",    f"{winner['macros']['carbs']}g",
-                              delta=f"{winner['macros']['carbs'] - target_carbs:+.0f}g vs target")
-                    st.metric("Fat",      f"{winner['macros']['fat']}g",
-                              delta=f"{winner['macros']['fat'] - target_fat:+.0f}g vs target")
-                    st.metric("Fiber",    f"{winner['macros']['fiber']}g")
+                    with col2:
+                        st.subheader("Macro Breakdown")
+                        st.metric("Calories", f"{winner['macros']['calories']} kcal",
+                                  delta=f"{winner['macros']['calories'] - target_cal:+} vs target")
+                        st.metric("Protein",  f"{winner['macros']['protein']}g",
+                                  delta=f"{winner['macros']['protein'] - target_prot:+.0f}g vs target")
+                        st.metric("Carbs",    f"{winner['macros']['carbs']}g",
+                                  delta=f"{winner['macros']['carbs'] - target_carbs:+.0f}g vs target")
+                        st.metric("Fat",      f"{winner['macros']['fat']}g",
+                                  delta=f"{winner['macros']['fat'] - target_fat:+.0f}g vs target")
+                        st.metric("Fiber",    f"{winner['macros']['fiber']}g")
+                else:
+                    st.error("No valid meal plan found with current constraints.")
             else:
-                st.error("No valid meal plan found with current constraints.")
-        else:
-            st.error("The database connected successfully, but solver.load_food_data() returned empty. Check your SQL query in solver.py!")
+                st.error("Database connected successfully, but returned empty data.")
+
+# ---------------------------------------------------------
+# TAB 2: EATING OUT (HYBRID)
+# ---------------------------------------------------------
+with tab_restaurant:
+    st.subheader("Restaurant Hybrid Plan")
+    st.caption("Select where you want to eat out. The engine incorporates that restaurant meal and fills the rest of your day with home cooking.")
+    
+    col_rest, col_slot = st.columns(2)
+    with col_rest:
+        restaurant = st.selectbox("Select Restaurant", ["Chipotle", "CAVA"])
+    with col_slot:
+        out_meal_slot = st.selectbox("Which meal are you eating out?", ["Lunch", "Dinner"])
+        
+    if st.button("Generate Restaurant Hybrid Plan"):
+        with st.spinner(f"Building plan around {restaurant}..."):
+            foods = solver.load_food_data(mode="eating_out", restaurant=restaurant)
+            
+            if foods:
+                winner = solver.run_heuristic_solver(
+                    foods, target_cal, target_prot, target_carbs, target_fat,
+                    restaurant=restaurant, 
+                    restaurant_meal=out_meal_slot
+                )
+                
+                if winner:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.subheader(f"Meal Plan (Includes {restaurant})")
+                        current_meal = None
+                        for item in winner['items']:
+                            if item['meal'] != current_meal:
+                                current_meal = item['meal']
+                                st.markdown(f"**🍽️ {current_meal}**")
+                            
+                            # Highlight restaurant items
+                            is_restaurant_item = restaurant.lower() in item['name'].lower()
+                            tag = f" `[{restaurant.upper()}]`" if is_restaurant_item else f" `[{item['category'].upper()}]`"
+                            st.write(f"  • **{item['servings']}x** {item['name']}{tag}")
+                    with col2:
+                        st.subheader("Macro Breakdown")
+                        st.metric("Calories", f"{winner['macros']['calories']} kcal",
+                                  delta=f"{winner['macros']['calories'] - target_cal:+} vs target")
+                        st.metric("Protein",  f"{winner['macros']['protein']}g",
+                                  delta=f"{winner['macros']['protein'] - target_prot:+.0f}g vs target")
+                        st.metric("Carbs",    f"{winner['macros']['carbs']}g",
+                                  delta=f"{winner['macros']['carbs'] - target_carbs:+.0f}g vs target")
+                        st.metric("Fat",      f"{winner['macros']['fat']}g",
+                                  delta=f"{winner['macros']['fat'] - target_fat:+.0f}g vs target")
+                        st.metric("Fiber",    f"{winner['macros']['fiber']}g")
+                else:
+                    st.error("No valid meal plan found with current constraints.")
+            else:
+                st.error("Database connected successfully, but returned empty data.")

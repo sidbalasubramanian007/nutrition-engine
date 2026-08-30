@@ -16,9 +16,9 @@ def test_rows_to_foods_transforms_rows_matching_the_products_query_shape():
     ]
     assert solver.rows_to_foods(rows) == [
         {"name": "Chicken Breast", "calories": 110, "protein": 23, "carbs": 0, "fat": 2,
-         "fiber": 0.0, "category": "lean_protein", "max_servings": 6},
+         "fiber": 0.0, "category": "lean_protein", "max_servings": 6, "location": "Grocery"},
         {"name": "Jasmine Rice", "calories": 200, "protein": 4, "carbs": 45, "fat": 0,
-         "fiber": 1.0, "category": "staple", "max_servings": 10},
+         "fiber": 1.0, "category": "staple", "max_servings": 10, "location": "Grocery"},
     ]
 
 
@@ -117,9 +117,9 @@ def test_build_meal_plan_penalty_matches_hand_calculated_value(deterministic_ran
 
     assert plan["macros"] == {"calories": 510, "protein": 43.0, "carbs": 72.0, "fat": 5.0, "fiber": 5.0}
 
-    # penalty = |510-510|*10 + |43-40|*15 + |72-70|*5 + |5-5|*8 + max(0, 5.0-35)*100
-    #         =        0     +     45     +    10     +    0    +         0
-    assert plan["penalty"] == 55.0
+    # penalty = |510-510|*20 + |43-40|*100 + |72-70|*20 + |5-5|*20 + max(0, 5.0-35)*50
+    #         =        0     +     300     +    40      +    0     +         0
+    assert plan["penalty"] == 340.0
 
     assert plan["items"] == [
         {"name": "Oats",      "servings": 1, "category": "staple",       "meal": "Breakfast"},
@@ -132,17 +132,17 @@ def test_build_meal_plan_penalty_matches_hand_calculated_value(deterministic_ran
 def test_build_meal_plan_penalty_scales_with_target_distance(deterministic_random):
     # Same deterministic plan as above (totals: 510/43/72/5/5.0), but targets moved
     # further away, isolating each weighted term:
-    #   calories term: |510-1010|*10 = 5000
-    #   protein term:  |43-20|*15    = 345
-    #   carbs term:    |72-20|*5     = 260
-    #   fat term:      |5-25|*8      = 160
-    #   fiber term:    max(0, 5-35)*100 = 0
-    # total = 5765
+    #   calories term: |510-1010|*20 = 10000
+    #   protein term:  |43-20|*100   = 2300
+    #   carbs term:    |72-20|*20    = 1040
+    #   fat term:      |5-25|*20     = 400
+    #   fiber term:    max(0, 5-35)*50 = 0
+    # total = 13740
     plan = solver.build_meal_plan(
         SCORING_FIXTURE_FOODS,
         target_calories=1010, target_protein=20, target_carbs=20, target_fat=25,
     )
-    assert plan["penalty"] == 5765.0
+    assert plan["penalty"] == 13740.0
 
 
 def test_build_meal_plan_penalizes_fiber_only_above_35g(deterministic_random):
@@ -156,9 +156,9 @@ def test_build_meal_plan_penalizes_fiber_only_above_35g(deterministic_random):
         high_fiber_foods,
         target_calories=510, target_protein=40, target_carbs=70, target_fat=5,
     )
-    # fiber total = 40.0 (only Oats contributes) -> excess = 40-35 = 5 -> +500 penalty
+    # fiber total = 40.0 (only Oats contributes) -> excess = 40-35 = 5 -> +250 penalty
     assert plan["macros"]["fiber"] == 40.0
-    assert plan["penalty"] == 55.0 + 500.0
+    assert plan["penalty"] == 340.0 + 250.0
 
 
 def test_build_meal_plan_returns_none_when_pools_are_missing_required_categories():
@@ -248,7 +248,7 @@ def test_run_heuristic_solver_picks_the_best_of_several_plans(monkeypatch):
         iterations=5,
     )
 
-    assert winner["penalty"] == 55.0
+    assert winner["penalty"] == 340.0
     assert winner["macros"] == {"calories": 510, "protein": 43.0, "carbs": 72.0, "fat": 5.0, "fiber": 5.0}
 
 
