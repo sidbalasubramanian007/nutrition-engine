@@ -13,9 +13,9 @@ A Streamlit app that builds a full daily meal plan from real grocery product dat
 2. Randomly assigns 1–3 servings to each item (snacks capped at 1 serving), keeping every food unique within the day.
 3. Scores the plan with a **weighted penalty across all four macros** (calories, protein, carbs, fat), plus an extra penalty if fiber exceeds 35g. This is deliberate: a naive solver can "cheat" by maxing out a single macro at the expense of the others, so every target is penalized simultaneously and the lowest-penalty plan across all iterations wins.
 
-**Data.** `scraper.py` uses Playwright to load a Trader Joe's category page, BeautifulSoup to pull product names, and the Gemini API (`google-genai`) to estimate per-serving macros (calories/protein/carbs/fat/fiber) for each scraped item, saving the result to `trader_joes_macros.json`. That file is then loaded into Postgres. A set of `seed_*.py` scripts also hand-seed additional curated staples (chicken, salmon, oats, rice, etc.) directly, independent of the scraper, so the solver always has reliable building blocks for each meal slot.
+**Data.** `scraper.py` uses Playwright to load a Trader Joe's category page, BeautifulSoup to pull product names, and the Gemini API (`google-genai`) to estimate per-serving macros (calories/protein/carbs/fat/fiber) for each scraped item, saving the result to `trader_joes_macros.json`. The main dataset is `food_data.csv` (grocery staples plus Chipotle and CAVA items, each tagged with a `location`). Curated staples (chicken, salmon, oats, rice, etc.) live in `data/*.csv`. `scripts/setup_db.py` loads `food_data.csv` by default and the other two sources on request.
 
-**Database.** Food data lives in a local PostgreSQL `nutrition_db`, in a single `products` table (name, calories, protein, carbs, fat, fiber, category, max_servings). The app queries this table on every "Generate Optimal Plan" click.
+**Database.** Food data lives in a local PostgreSQL `nutrition_db`, in a single `products` table defined in `schema.sql` (name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots). The app queries this table on every "Generate Optimal Plan" click.
 
 ## Tech stack
 
@@ -36,11 +36,12 @@ See `requirements.txt` for pinned versions.
 | `calculator.py` | TDEE (Mifflin-St Jeor) and macro-target math: BMR → TDEE by activity level → goal adjustment, protein estimate by bodyweight/goal, and fat/carb split from remaining calories. |
 | `solver.py` | The heuristic meal-plan solver: `MEAL_SLOT_MAP`, structured plan construction, serving-size selection, four-macro penalty scoring, and the iteration loop that picks the best plan. |
 | `scraper.py` | Scrapes a Trader Joe's category page with Playwright/BeautifulSoup, then calls the Gemini API to estimate nutrition macros for each item and writes `trader_joes_macros.json`. |
-| `db.py` | Shared `get_connection()` helper — opens the Postgres connection from `DATABASE_URL` if set, otherwise from `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` (with local defaults). Used by `app.py`, `solver.py`, `import_csv.py` and every script below. |
-| `scripts/migrate.py` | Creates the `products` table (if it doesn't exist) and loads `trader_joes_macros.json` into it. |
-| `scripts/tag_data.py` | Adds a `category` column and tags existing rows (`bakery`, `lean_protein`, or default `misc`) based on keyword matches in the product name. |
-| `scripts/migrate_limits.py` | Adds a `max_servings` column (default 3) and backfills existing rows. |
-| `scripts/seed_protein.py`, `scripts/seed_carbs.py`, `scripts/seed_meat.py`, `scripts/seed_elite.py` | Hand-seed curated staple items (proteins, carb staples, additional lean proteins/sides) directly into `products`, independent of the scraper. |
+| `db.py` | Shared `get_connection()` helper — opens the Postgres connection from `DATABASE_URL` if set, otherwise from `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` (with local defaults). Used by `app.py`, `solver.py` and every script below. |
+| `schema.sql` | Final `products` table schema. Idempotent; also upgrades tables created by the old migration scripts. |
+| `food_data.csv` | Main food dataset (grocery + restaurant items), loaded by default. |
+| `data/*.csv` | Curated staple proteins and carbs (same columns as `food_data.csv`), loaded with `--with-seeds`. |
+| `scripts/setup_db.py` | One-step database setup: applies `schema.sql`, then upserts the food data by name, so it's safe to re-run. |
+| `docker-compose.yml` | Local `postgres:16` on host port 5433, configured from the same `DB_*` variables as `db.py`. |
 | `scripts/check_db.py` | Utility script — prints all products in the DB sorted by protein, descending. |
 
 `app.py`, `calculator.py`, `solver.py`, `scraper.py`, and `db.py` are the core application modules and stay at the repo root. Everything in `scripts/` is a one-off migration/seed/inspection script, run manually during setup — each adjusts `sys.path` to import `db` from the parent directory.
@@ -59,7 +60,7 @@ pip install -r requirements.txt
 
 `db.py`'s `get_connection()` is the only place that opens database connections, and it reads its settings from the environment (via `python-dotenv`):
 
-- If `DATABASE_URL` is set (e.g. `postgresql://user:password@host:5432/nutrition_db` for hosted Postgres), it is used as-is and the `DB_*` variables are ignored.
+- If `DATABASE_URL` is set and non-empty (e.g. `postgresql://user:password@host:5432/nutrition_db` for hosted Postgres), it is used as-is and the `DB_*` variables are ignored.
 - Otherwise it uses the individual variables, falling back to local defaults:
 
 | Variable | Default |
@@ -85,37 +86,48 @@ DB_PASSWORD=
 
 ### 3. Database setup
 
-Requires a local PostgreSQL instance.
+You need a Postgres database to load into. Pick one of the two options below.
+
+**Option A: Docker (recommended).** `docker-compose.yml` runs `postgres:16` and creates the user, password and database from your `.env`. It maps to host port **5433** so it won't clash with a Postgres already installed on 5432. Set these in `.env`:
+
+```
+DB_HOST=localhost
+DB_PORT=5433
+DB_NAME=nutrition_db
+DB_USER=nutrition
+DB_PASSWORD=choose-a-password
+```
+
+`DB_USER` and `DB_PASSWORD` are required here. Compose refuses to start without them, so the container and `db.py` always agree on credentials. Then start the database:
+
+```bash
+docker compose up -d --wait
+```
+
+**Option B: an existing local Postgres.** Keep `DB_PORT=5432` (or leave it unset) and create the database:
 
 ```bash
 createdb nutrition_db
 ```
 
-Then, with the venv active and from the repo root, run the migration and seed scripts **in this order**:
+**Load the data.** With the venv active, from the repo root:
 
 ```bash
-# (Optional) scrape fresh product data — requires GEMINI_API_KEY
-python scraper.py
-
-# Create the products table and load scraper output (if trader_joes_macros.json exists)
-python scripts/migrate.py
-
-# Add curated meat items (no category/max_servings yet)
-python scripts/seed_meat.py
-
-# Add category column and tag all rows (bakery / lean_protein / misc)
-python scripts/tag_data.py
-
-# Add max_servings column and backfill defaults
-python scripts/migrate_limits.py
-
-# Add remaining curated staples with explicit category + max_servings
-python scripts/seed_protein.py
-python scripts/seed_carbs.py
-python scripts/seed_elite.py
+python scripts/setup_db.py
 ```
 
-You can sanity-check the loaded data at any point with:
+This creates the `products` table from `schema.sql` if needed, then upserts every row of `food_data.csv` by name. It is safe to re-run at any time: rows are updated in place, never duplicated. Optional extras:
+
+```bash
+python scripts/setup_db.py --with-seeds        # + curated staples in data/*.csv
+python scripts/setup_db.py --with-trader-joes  # + trader_joes_macros.json, if present
+```
+
+If the same name appears in more than one source, `food_data.csv` wins over `data/*.csv`, which wins over the Trader Joe's data. Re-running without a flag doesn't remove rows a previous flagged run added. To get back to the default set, recreate the database (with Docker: `docker compose down -v && docker compose up -d --wait`) and run the script again.
+
+To refresh the Trader Joe's data first, run `python scraper.py` (requires `GEMINI_API_KEY`).
+
+You can sanity-check the loaded data with:
 
 ```bash
 python scripts/check_db.py
