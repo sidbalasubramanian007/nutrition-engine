@@ -48,10 +48,12 @@ HAND_PLAN_ITEMS = [
 ]
 
 
-def test_optimizer_finds_the_hand_computed_plan():
-    result = optimizer.optimize_meal_plan(HAND_FOODS, 1365, 99, 215, 11)
+@pytest.mark.parametrize("solver_name", ["highs", "cbc"])
+def test_optimizer_finds_the_hand_computed_plan(solver_name):
+    result = optimizer.optimize_meal_plan(HAND_FOODS, 1365, 99, 215, 11, solver_name=solver_name)
 
     assert result["status"] == "optimal"
+    assert result["solver"] == solver_name
     assert result["items"] == HAND_PLAN_ITEMS
     assert result["macros"] == {"calories": 1365, "protein": 99.0, "carbs": 215.0, "fat": 11.0, "fiber": 12.0}
     assert result["penalty"] == 0.0
@@ -142,3 +144,53 @@ def test_optimizer_penalty_is_never_worse_than_the_heuristic():
     assert result["status"] == "optimal"
     # Small tolerance only for float summation order; both use solver.plan_penalty.
     assert result["penalty"] <= heuristic["penalty"] + 1e-6
+
+
+def all_grocery_foods():
+    """The 39-food grocery pool: food_data.csv + data/*.csv + Trader Joe's, read from files."""
+    foods = setup_db.collect_products(with_seeds=True, with_trader_joes=True)
+    return [f for f in foods if f["location"] == "Grocery"]
+
+
+def test_optimizer_penalty_is_never_worse_than_the_heuristic_on_the_full_grocery_pool():
+    foods = all_grocery_foods()
+    random.seed(0)
+    heuristic = solver.run_heuristic_solver(foods, 2800, 170, 390, 68, iterations=50000)
+
+    result = optimizer.optimize_meal_plan(foods, 2800, 170, 390, 68)
+
+    assert result["status"] == "optimal"
+    assert result["penalty"] <= heuristic["penalty"] + 1e-6
+
+
+# --- solver choice, warm start, time limit ---
+
+def test_defaults_to_highs_and_falls_back_to_cbc_without_highspy(monkeypatch):
+    assert optimizer.default_solver() == "highs"
+    monkeypatch.setattr(optimizer, "highspy", None)
+    assert optimizer.default_solver() == "cbc"
+
+    result = optimizer.optimize_meal_plan(HAND_FOODS, 1365, 99, 215, 11)
+    assert result["solver"] == "cbc"
+    assert result["items"] == HAND_PLAN_ITEMS
+
+
+def test_warm_start_neither_prints_nor_changes_the_callers_random_state(capsys):
+    random.seed(123)
+    expected_next = random.random()
+    random.seed(123)
+
+    optimizer.optimize_meal_plan(HAND_FOODS, 1365, 99, 215, 11, warm_start_iterations=500)
+
+    assert random.random() == expected_next
+    assert capsys.readouterr().out == ""
+
+
+def test_hitting_the_time_limit_returns_the_best_plan_found_as_feasible():
+    # Proving optimality on the full pool takes ~2s; the warm start guarantees a plan
+    # to return when the solver is cut off long before that.
+    result = optimizer.optimize_meal_plan(all_grocery_foods(), 2800, 170, 390, 68, time_limit=0.05)
+
+    assert result["status"] == "feasible"
+    assert result["penalty"] is not None
+    assert len(result["items"]) >= 7
