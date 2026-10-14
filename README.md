@@ -37,7 +37,6 @@ See `requirements.txt` for pinned versions.
 | `solver.py` | The heuristic meal-plan solver: `MEAL_SLOT_MAP`, structured plan construction, serving-size selection, four-macro penalty scoring, and the iteration loop that picks the best plan. |
 | `scraper.py` | Scrapes a Trader Joe's category page with Playwright/BeautifulSoup, then calls the Gemini API to estimate nutrition macros for each item and writes `trader_joes_macros.json`. |
 | `db.py` | Shared `get_connection()` helper — opens the Postgres connection using `DB_NAME`/`DB_HOST` env vars (with local defaults), used by every script below and by `solver.py`. |
-| `test_ai.py` | Smoke test for the Gemini API connection/`.env` setup. |
 | `scripts/migrate.py` | Creates the `products` table (if it doesn't exist) and loads `trader_joes_macros.json` into it. |
 | `scripts/tag_data.py` | Adds a `category` column and tags existing rows (`bakery`, `lean_protein`, or default `misc`) based on keyword matches in the product name. |
 | `scripts/migrate_limits.py` | Adds a `max_servings` column (default 3) and backfills existing rows. |
@@ -68,7 +67,7 @@ DB_HOST=localhost
 DB_NAME=nutrition_db
 ```
 
-`GEMINI_API_KEY` is only required to run `scraper.py` or `test_ai.py`. `DB_HOST`/`DB_NAME` can be omitted entirely for local development — the defaults just work.
+`GEMINI_API_KEY` is only required to run `scraper.py`. `DB_HOST`/`DB_NAME` can be omitted entirely for local development — the defaults just work.
 
 ### 3. Database setup
 

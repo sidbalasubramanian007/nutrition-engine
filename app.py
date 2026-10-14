@@ -1,8 +1,7 @@
 import streamlit as st
 import solver
 import calculator
-import os
-import psycopg2
+import db
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,20 +9,16 @@ load_dotenv()
 # 1. SETUP - Must be the first Streamlit command
 st.set_page_config(page_title="Nutrition Engine", layout="wide")
 
-# 🚨 DIRECT DATABASE TEST TO EXPOSE THE REAL ERROR 🚨
+# Fail fast with setup instructions if the database is unreachable
 try:
-    conn = psycopg2.connect(
-        host=os.getenv("DB_HOST", "localhost"),
-        port=os.getenv("DB_PORT", 5432),
-        database=os.getenv("DB_NAME", "nutrition_db"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD", "")
-    )
-    conn.close()
+    db.get_connection().close()
 except Exception as e:
-    st.error(f"🚨 REAL DATABASE ERROR: {e}")
-    st.warning("If the error says 'FATAL: role \"None\" does not exist', Python is not finding your .env file.")
-    st.stop() # Stops the rest of the app from running so you can read the error
+    st.error(
+        f"Could not connect to the database ({e}). Make sure PostgreSQL is running, "
+        "then set DB_HOST and DB_NAME in a .env file in the repo root (see .env.example; "
+        "defaults are localhost / nutrition_db) and restart the app."
+    )
+    st.stop()
 
 # 2. STATE MANAGEMENT - Initialize all four macro targets
 if 'target_cal'   not in st.session_state: st.session_state.target_cal   = 2800
