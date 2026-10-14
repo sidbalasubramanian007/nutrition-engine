@@ -1,43 +1,11 @@
 import random
 import db
 
-# Maps each food (by name) to the meal slots it belongs in.
-# Foods not listed here are flexible and can appear in any slot.
-MEAL_SLOT_MAP = {
-    # Breakfast only
-    "Rolled Oats":               ["breakfast"],
-    "Egg Whites":                ["breakfast"],
-    # Breakfast + snack
-    "Bananas":                   ["breakfast", "snack"],
-    "0% Greek Yogurt":           ["breakfast", "snack"],
-    "Nonfat Plain Greek Yogurt": ["breakfast", "snack"],
-    "Whey Protein Powder":       ["breakfast", "snack"],
-    # Lunch/Dinner carbs
-    "Jasmine Rice":              ["lunch", "dinner"],
-    "Sweet Potato":              ["lunch", "dinner"],
-    "Quinoa":                    ["lunch", "dinner"],
-    "Brown Rice":                ["lunch", "dinner"],
-    # Lunch/Dinner proteins — ALL proteins must be listed here explicitly
-    # so nothing leaks into breakfast by falling through the default
-    "Chicken Breast":            ["lunch", "dinner"],
-    "Organic Boneless Skinless Chicken Breast": ["lunch", "dinner"],
-    "Wild Sockeye Salmon":       ["dinner"],
-    "Lean Ground Turkey":        ["lunch", "dinner"],
-    "Lean Ground Turkey (93/7)": ["lunch", "dinner"],
-    "Organic Firm Tofu":         ["lunch", "dinner"],
-    "Sirloin Steak":             ["dinner"],
-    "Cod Fillet":                ["lunch", "dinner"],
-    "Shrimp":                    ["lunch", "dinner"],
-    # Fats / sides
-    "Avocado":                   ["lunch", "dinner"],
-    "Almonds":                   ["snack"],
-}
-
 def fetch_products_rows():
     """Runs the products query against Postgres and returns the raw rows."""
     conn = db.get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT name, calories, protein, carbs, fat, fiber, category, max_servings, location FROM products;")
+    cursor.execute("SELECT name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots FROM products;")
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -47,9 +15,6 @@ def rows_to_foods(rows):
     """Transforms raw product rows into the food dicts used by the solver."""
     foods = []
     for row in rows:
-        # Safely check if the 9th column exists (for backwards compatibility in tests)
-        location_val = row[8] if len(row) > 8 else "Grocery"
-        
         foods.append({
             "name":         row[0],
             "calories":     float(row[1]),
@@ -59,7 +24,8 @@ def rows_to_foods(rows):
             "fiber":        float(row[5]),
             "category":     row[6],
             "max_servings": int(row[7]),
-            "location":     location_val
+            "location":     row[8],
+            "meal_slots":   list(row[9]),
         })
     return foods
 
@@ -85,23 +51,8 @@ def load_food_data(mode="grocery", restaurant=None):
         return None
 
 def foods_for_slot(pool, slot):
-    """
-    Filter a food pool to items that belong in the given meal slot.
-    Proteins not explicitly listed in MEAL_SLOT_MAP default to lunch/dinner only.
-    """
-    result = []
-    for f in pool:
-        if f['name'] in MEAL_SLOT_MAP:
-            if slot in MEAL_SLOT_MAP[f['name']]:
-                result.append(f)
-        else:
-            # Safe default: unmapped proteins → lunch/dinner only
-            if f['category'] == 'lean_protein':
-                if slot in ['lunch', 'dinner']:
-                    result.append(f)
-            else:
-                result.append(f)
-    return result
+    """Filter a food pool to items whose meal_slots include the given slot."""
+    return [f for f in pool if slot in f['meal_slots']]
 
 def pick_unique(pool, used_names):
     """Pick a random food from pool that hasn't been used today yet."""
@@ -235,12 +186,6 @@ def display_meal_plan(winner):
     print(f" - Fiber:    {winner['macros']['fiber']}g")
     print("==================================================")
 
-if __name__ == "__main__":
-    food_db = load_food_data()
-    if food_db:
-        winning_plan = run_heuristic_solver(food_db)
-        display_meal_plan(winning_plan)
-
 def build_restaurant_order(foods, target_calories, target_protein, target_carbs, target_fat):
     """Builds a single custom order from a restaurant's ingredient pool."""
     # Pick 2 to 5 random components (e.g., meat, rice, beans, guac)
@@ -286,3 +231,9 @@ def run_restaurant_solver(foods, target_calories, target_protein, target_carbs, 
             best = plan
             
     return best
+
+if __name__ == "__main__":
+    food_db = load_food_data()
+    if food_db:
+        winning_plan = run_heuristic_solver(food_db)
+        display_meal_plan(winning_plan)

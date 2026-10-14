@@ -4,28 +4,33 @@ import pytest
 
 import solver
 
+ALL_SLOTS = ["breakfast", "lunch", "dinner", "snack"]
+LUNCH_DINNER = ["lunch", "dinner"]
+
 
 # --- rows_to_foods ---
 
 def test_rows_to_foods_transforms_rows_matching_the_products_query_shape():
     # Column order matches fetch_products_rows()'s SELECT:
-    # name, calories, protein, carbs, fat, fiber, category, max_servings
+    # name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots
     rows = [
-        ("Chicken Breast", 110, 23, 0, 2, 0.0, "lean_protein", 6),
-        ("Jasmine Rice", 200, 4, 45, 0, 1.0, "staple", 10),
+        ("Chicken Breast", 110, 23, 0, 2, 0.0, "lean_protein", 6, "Grocery", ["lunch", "dinner"]),
+        ("Chipotle White Rice", 210, 4, 40, 4, 1.0, "staple", 2, "Chipotle", ["lunch", "dinner"]),
     ]
     assert solver.rows_to_foods(rows) == [
         {"name": "Chicken Breast", "calories": 110, "protein": 23, "carbs": 0, "fat": 2,
-         "fiber": 0.0, "category": "lean_protein", "max_servings": 6, "location": "Grocery"},
-        {"name": "Jasmine Rice", "calories": 200, "protein": 4, "carbs": 45, "fat": 0,
-         "fiber": 1.0, "category": "staple", "max_servings": 10, "location": "Grocery"},
+         "fiber": 0.0, "category": "lean_protein", "max_servings": 6, "location": "Grocery",
+         "meal_slots": ["lunch", "dinner"]},
+        {"name": "Chipotle White Rice", "calories": 210, "protein": 4, "carbs": 40, "fat": 4,
+         "fiber": 1.0, "category": "staple", "max_servings": 2, "location": "Chipotle",
+         "meal_slots": ["lunch", "dinner"]},
     ]
 
 
 def test_rows_to_foods_coerces_fiber_to_float():
     # fiber is stored as Postgres FLOAT but psycopg2 can hand back int-like values
     # (e.g. whole-number fiber); rows_to_foods explicitly coerces it to float.
-    rows = [("Egg Whites", 50, 11, 0, 0, 0, "lean_protein", 8)]
+    rows = [("Egg Whites", 50, 11, 0, 0, 0, "lean_protein", 8, "Grocery", ["breakfast"])]
     foods = solver.rows_to_foods(rows)
     assert foods[0]["fiber"] == 0.0
     assert isinstance(foods[0]["fiber"], float)
@@ -37,29 +42,27 @@ def test_rows_to_foods_empty_input_returns_empty_list():
 
 # --- foods_for_slot ---
 
-def test_foods_for_slot_respects_explicit_meal_slot_map():
-    # "Sirloin Steak" is mapped to ["dinner"] only in solver.MEAL_SLOT_MAP
-    steak = {"name": "Sirloin Steak", "category": "lean_protein"}
-    assert solver.foods_for_slot([steak], "dinner") == [steak]
-    assert solver.foods_for_slot([steak], "lunch") == []
-    assert solver.foods_for_slot([steak], "breakfast") == []
+def test_foods_for_slot_includes_only_foods_whose_meal_slots_contain_the_slot():
+    oats = {"name": "Rolled Oats", "category": "staple", "meal_slots": ["breakfast"]}
+    banana = {"name": "Bananas", "category": "carb", "meal_slots": ["breakfast", "snack"]}
+    rice = {"name": "Jasmine Rice", "category": "staple", "meal_slots": LUNCH_DINNER}
+    pool = [oats, banana, rice]
+    assert solver.foods_for_slot(pool, "breakfast") == [oats, banana]
+    assert solver.foods_for_slot(pool, "snack") == [banana]
+    assert solver.foods_for_slot(pool, "lunch") == [rice]
 
 
-def test_foods_for_slot_unmapped_lean_protein_defaults_to_lunch_dinner_only():
-    # A protein not listed in MEAL_SLOT_MAP must never leak into breakfast/snack
-    mystery_meat = {"name": "Mystery Meat", "category": "lean_protein"}
-    assert solver.foods_for_slot([mystery_meat], "lunch") == [mystery_meat]
-    assert solver.foods_for_slot([mystery_meat], "dinner") == [mystery_meat]
-    assert solver.foods_for_slot([mystery_meat], "breakfast") == []
-    assert solver.foods_for_slot([mystery_meat], "snack") == []
+def test_foods_for_slot_ignores_name_and_category():
+    # Slots come purely from the data now -- a protein tagged for breakfast is allowed there.
+    egg_whites = {"name": "Egg Whites", "category": "lean_protein", "meal_slots": ["breakfast"]}
+    assert solver.foods_for_slot([egg_whites], "breakfast") == [egg_whites]
+    assert solver.foods_for_slot([egg_whites], "lunch") == []
 
 
-def test_foods_for_slot_unmapped_non_protein_is_included_regardless_of_slot():
-    # Unmapped, non-lean_protein items fall into the "always eligible" default branch --
-    # the slot argument has no filtering effect on them at all.
-    mystery_side = {"name": "Mystery Side", "category": "staple"}
-    for slot in ["breakfast", "lunch", "dinner", "snack"]:
-        assert solver.foods_for_slot([mystery_side], slot) == [mystery_side]
+def test_foods_for_slot_empty_meal_slots_matches_nothing():
+    unslotted = {"name": "Nowhere", "category": "staple", "meal_slots": []}
+    for slot in ALL_SLOTS:
+        assert solver.foods_for_slot([unslotted], slot) == []
 
 
 # --- pick_unique ---
@@ -81,14 +84,14 @@ def test_pick_unique_returns_none_for_empty_pool():
 
 # --- build_meal_plan: scoring / penalty ---
 
-# Fixture foods use names that don't collide with solver.MEAL_SLOT_MAP, so the
-# real, unmodified MEAL_SLOT_MAP default rules apply (see foods_for_slot tests above).
+# Fixture foods use the default meal slots setup_db.py assigns to unmapped foods:
+# staples fit any slot, lean proteins are lunch/dinner only.
 SCORING_FIXTURE_FOODS = [
-    {"name": "Oats",      "calories": 150, "protein": 5,  "carbs": 27, "fat": 3, "fiber": 4.0, "category": "staple",       "max_servings": 3},
-    {"name": "EggWhites", "calories": 50,  "protein": 11, "carbs": 0,  "fat": 0, "fiber": 0.0, "category": "lean_protein", "max_servings": 3},
-    {"name": "Rice",      "calories": 200, "protein": 4,  "carbs": 45, "fat": 0, "fiber": 1.0, "category": "staple",       "max_servings": 3},
-    {"name": "Chicken",   "calories": 110, "protein": 23, "carbs": 0,  "fat": 2, "fiber": 0.0, "category": "lean_protein", "max_servings": 3},
-    {"name": "Salmon",    "calories": 130, "protein": 21, "carbs": 0,  "fat": 4, "fiber": 0.0, "category": "lean_protein", "max_servings": 3},
+    {"name": "Oats",      "calories": 150, "protein": 5,  "carbs": 27, "fat": 3, "fiber": 4.0, "category": "staple",       "max_servings": 3, "meal_slots": ALL_SLOTS},
+    {"name": "EggWhites", "calories": 50,  "protein": 11, "carbs": 0,  "fat": 0, "fiber": 0.0, "category": "lean_protein", "max_servings": 3, "meal_slots": LUNCH_DINNER},
+    {"name": "Rice",      "calories": 200, "protein": 4,  "carbs": 45, "fat": 0, "fiber": 1.0, "category": "staple",       "max_servings": 3, "meal_slots": ALL_SLOTS},
+    {"name": "Chicken",   "calories": 110, "protein": 23, "carbs": 0,  "fat": 2, "fiber": 0.0, "category": "lean_protein", "max_servings": 3, "meal_slots": LUNCH_DINNER},
+    {"name": "Salmon",    "calories": 130, "protein": 21, "carbs": 0,  "fat": 4, "fiber": 0.0, "category": "lean_protein", "max_servings": 3, "meal_slots": LUNCH_DINNER},
 ]
 
 
@@ -147,10 +150,10 @@ def test_build_meal_plan_penalty_scales_with_target_distance(deterministic_rando
 
 def test_build_meal_plan_penalizes_fiber_only_above_35g(deterministic_random):
     high_fiber_foods = [
-        {"name": "Oats",      "calories": 150, "protein": 5,  "carbs": 27, "fat": 3, "fiber": 40.0, "category": "staple",       "max_servings": 3},
-        {"name": "EggWhites", "calories": 50,  "protein": 11, "carbs": 0,  "fat": 0, "fiber": 0.0,  "category": "lean_protein", "max_servings": 3},
-        {"name": "Rice",      "calories": 200, "protein": 4,  "carbs": 45, "fat": 0, "fiber": 0.0,  "category": "staple",       "max_servings": 3},
-        {"name": "Chicken",   "calories": 110, "protein": 23, "carbs": 0,  "fat": 2, "fiber": 0.0,  "category": "lean_protein", "max_servings": 3},
+        {"name": "Oats",      "calories": 150, "protein": 5,  "carbs": 27, "fat": 3, "fiber": 40.0, "category": "staple",       "max_servings": 3, "meal_slots": ALL_SLOTS},
+        {"name": "EggWhites", "calories": 50,  "protein": 11, "carbs": 0,  "fat": 0, "fiber": 0.0,  "category": "lean_protein", "max_servings": 3, "meal_slots": LUNCH_DINNER},
+        {"name": "Rice",      "calories": 200, "protein": 4,  "carbs": 45, "fat": 0, "fiber": 0.0,  "category": "staple",       "max_servings": 3, "meal_slots": ALL_SLOTS},
+        {"name": "Chicken",   "calories": 110, "protein": 23, "carbs": 0,  "fat": 2, "fiber": 0.0,  "category": "lean_protein", "max_servings": 3, "meal_slots": LUNCH_DINNER},
     ]
     plan = solver.build_meal_plan(
         high_fiber_foods,
@@ -164,7 +167,7 @@ def test_build_meal_plan_penalizes_fiber_only_above_35g(deterministic_random):
 def test_build_meal_plan_returns_none_when_pools_are_missing_required_categories():
     # No lean_protein items at all -> lunch_prots/dinner_prots are empty -> invalid day
     no_protein_foods = [
-        {"name": "Oats", "calories": 150, "protein": 5, "carbs": 27, "fat": 3, "fiber": 4.0, "category": "staple", "max_servings": 3},
+        {"name": "Oats", "calories": 150, "protein": 5, "carbs": 27, "fat": 3, "fiber": 4.0, "category": "staple", "max_servings": 3, "meal_slots": ALL_SLOTS},
     ]
     assert solver.build_meal_plan(no_protein_foods, 2000, 150, 250, 60) is None
 
@@ -179,11 +182,11 @@ def test_build_meal_plan_caps_servings_at_three_even_with_high_max_servings(monk
     monkeypatch.setattr(solver.random, "randint", lambda a, b: b)
 
     foods = [
-        {"name": "S1", "category": "staple",       "max_servings": 10, "calories": 100, "protein": 1,  "carbs": 10, "fat": 1, "fiber": 1.0},
-        {"name": "S2", "category": "staple",       "max_servings": 10, "calories": 100, "protein": 1,  "carbs": 10, "fat": 1, "fiber": 1.0},
-        {"name": "S3", "category": "staple",       "max_servings": 10, "calories": 100, "protein": 1,  "carbs": 10, "fat": 1, "fiber": 1.0},
-        {"name": "S4", "category": "staple",       "max_servings": 10, "calories": 100, "protein": 1,  "carbs": 10, "fat": 1, "fiber": 1.0},
-        {"name": "P1", "category": "lean_protein", "max_servings": 3,  "calories": 100, "protein": 20, "carbs": 0,  "fat": 2, "fiber": 0.0},
+        {"name": "S1", "category": "staple",       "max_servings": 10, "calories": 100, "protein": 1,  "carbs": 10, "fat": 1, "fiber": 1.0, "meal_slots": ALL_SLOTS},
+        {"name": "S2", "category": "staple",       "max_servings": 10, "calories": 100, "protein": 1,  "carbs": 10, "fat": 1, "fiber": 1.0, "meal_slots": ALL_SLOTS},
+        {"name": "S3", "category": "staple",       "max_servings": 10, "calories": 100, "protein": 1,  "carbs": 10, "fat": 1, "fiber": 1.0, "meal_slots": ALL_SLOTS},
+        {"name": "S4", "category": "staple",       "max_servings": 10, "calories": 100, "protein": 1,  "carbs": 10, "fat": 1, "fiber": 1.0, "meal_slots": ALL_SLOTS},
+        {"name": "P1", "category": "lean_protein", "max_servings": 3,  "calories": 100, "protein": 20, "carbs": 0,  "fat": 2, "fiber": 0.0, "meal_slots": LUNCH_DINNER},
     ]
 
     plan = solver.build_meal_plan(foods, target_calories=1000, target_protein=50, target_carbs=100, target_fat=20)
@@ -204,11 +207,11 @@ def test_build_meal_plan_caps_snack_servings_at_one_regardless_of_max_servings(m
     monkeypatch.setattr(solver.random, "randint", lambda a, b: b)
 
     foods = [
-        {"name": "S1", "category": "staple",       "max_servings": 10, "calories": 100, "protein": 1,  "carbs": 10, "fat": 1, "fiber": 1.0},
-        {"name": "S2", "category": "staple",       "max_servings": 10, "calories": 100, "protein": 1,  "carbs": 10, "fat": 1, "fiber": 1.0},
-        {"name": "S3", "category": "staple",       "max_servings": 10, "calories": 100, "protein": 1,  "carbs": 10, "fat": 1, "fiber": 1.0},
-        {"name": "S4", "category": "staple",       "max_servings": 10, "calories": 100, "protein": 1,  "carbs": 10, "fat": 1, "fiber": 1.0},
-        {"name": "P1", "category": "lean_protein", "max_servings": 3,  "calories": 100, "protein": 20, "carbs": 0,  "fat": 2, "fiber": 0.0},
+        {"name": "S1", "category": "staple",       "max_servings": 10, "calories": 100, "protein": 1,  "carbs": 10, "fat": 1, "fiber": 1.0, "meal_slots": ALL_SLOTS},
+        {"name": "S2", "category": "staple",       "max_servings": 10, "calories": 100, "protein": 1,  "carbs": 10, "fat": 1, "fiber": 1.0, "meal_slots": ALL_SLOTS},
+        {"name": "S3", "category": "staple",       "max_servings": 10, "calories": 100, "protein": 1,  "carbs": 10, "fat": 1, "fiber": 1.0, "meal_slots": ALL_SLOTS},
+        {"name": "S4", "category": "staple",       "max_servings": 10, "calories": 100, "protein": 1,  "carbs": 10, "fat": 1, "fiber": 1.0, "meal_slots": ALL_SLOTS},
+        {"name": "P1", "category": "lean_protein", "max_servings": 3,  "calories": 100, "protein": 20, "carbs": 0,  "fat": 2, "fiber": 0.0, "meal_slots": LUNCH_DINNER},
     ]
 
     plan = solver.build_meal_plan(foods, target_calories=1000, target_protein=50, target_carbs=100, target_fat=20)
@@ -254,6 +257,32 @@ def test_run_heuristic_solver_picks_the_best_of_several_plans(monkeypatch):
 
 def test_run_heuristic_solver_returns_none_when_no_valid_plan_exists():
     no_protein_foods = [
-        {"name": "Oats", "calories": 150, "protein": 5, "carbs": 27, "fat": 3, "fiber": 4.0, "category": "staple", "max_servings": 3},
+        {"name": "Oats", "calories": 150, "protein": 5, "carbs": 27, "fat": 3, "fiber": 4.0, "category": "staple", "max_servings": 3, "meal_slots": ALL_SLOTS},
     ]
     assert solver.run_heuristic_solver(no_protein_foods, iterations=10) is None
+
+# --- meal slots from the real data files ---
+
+def load_all_real_foods():
+    """Every food setup_db.py can load (food_data.csv + data/*.csv + Trader Joe's), in solver shape."""
+    import setup_db
+    return setup_db.collect_products(with_seeds=True, with_trader_joes=True)
+
+
+def test_steak_and_salmon_are_never_tagged_for_breakfast_in_the_data():
+    foods = load_all_real_foods()
+    steak_and_salmon = [f for f in foods if "Steak" in f["name"] or "Salmon" in f["name"]]
+    # Sirloin Steak, Wild Sockeye Salmon, Chipotle Steak, CAVA Grilled Steak
+    assert len(steak_and_salmon) >= 4
+    for food in steak_and_salmon:
+        assert "breakfast" not in food["meal_slots"], food["name"]
+
+
+@pytest.mark.parametrize("restaurant, restaurant_meal", [(None, None), ("Chipotle", "Lunch"), ("CAVA", "Dinner")])
+def test_steak_and_salmon_never_land_in_breakfast_across_many_plans(restaurant, restaurant_meal):
+    foods = [f for f in load_all_real_foods() if f["location"] in ("Grocery", restaurant)]
+    random.seed(0)
+    for _ in range(2000):
+        plan = solver.build_meal_plan(foods, 2800, 170, 390, 68, restaurant, restaurant_meal)
+        breakfast = [item["name"] for item in plan["items"] if item["meal"] == "Breakfast"]
+        assert not any("Steak" in name or "Salmon" in name for name in breakfast), breakfast

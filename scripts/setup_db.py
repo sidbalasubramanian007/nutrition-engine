@@ -7,6 +7,10 @@ Usage (from the repo root):
 
 Rows are upserted by name. When the same name appears in more than one source,
 food_data.csv wins over the seed files, which win over the Trader Joe's data.
+
+Meal slots come from each CSV's Meal_Slots column (e.g. "breakfast|snack"). Rows
+without one (Trader Joe's items, blank cells, leftovers from older loads) get the
+default rule in default_meal_slots().
 """
 import argparse
 import csv
@@ -30,9 +34,11 @@ TRADER_JOES_PATH = os.path.join(ROOT, "trader_joes_macros.json")
 BAKERY_KEYWORDS = ['Muffin', 'Bread', 'Cake', 'Blondie', 'Pretzel', 'Pancake', 'Waffle', 'Scone', 'Graham', 'Cookie', 'Tortilla', 'Brioche']
 PROTEIN_KEYWORDS = ['Chicken', 'Salmon', 'Turkey', 'Yogurt', 'Tofu']
 
+MEAL_SLOTS = ["breakfast", "lunch", "dinner", "snack"]
+
 UPSERT_QUERY = """
-INSERT INTO products (name, calories, protein, carbs, fat, fiber, category, max_servings, location)
-VALUES (%(name)s, %(calories)s, %(protein)s, %(carbs)s, %(fat)s, %(fiber)s, %(category)s, %(max_servings)s, %(location)s)
+INSERT INTO products (name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots)
+VALUES (%(name)s, %(calories)s, %(protein)s, %(carbs)s, %(fat)s, %(fiber)s, %(category)s, %(max_servings)s, %(location)s, %(meal_slots)s)
 ON CONFLICT (name) DO UPDATE SET
     calories     = EXCLUDED.calories,
     protein      = EXCLUDED.protein,
@@ -41,8 +47,27 @@ ON CONFLICT (name) DO UPDATE SET
     fiber        = EXCLUDED.fiber,
     category     = EXCLUDED.category,
     max_servings = EXCLUDED.max_servings,
-    location     = EXCLUDED.location;
+    location     = EXCLUDED.location,
+    meal_slots   = EXCLUDED.meal_slots;
 """
+
+
+def default_meal_slots(category, location):
+    """Restaurant items and lean proteins are lunch/dinner only; everything else fits any slot."""
+    if location != "Grocery" or category == "lean_protein":
+        return ["lunch", "dinner"]
+    return list(MEAL_SLOTS)
+
+
+def parse_meal_slots(value, category, location):
+    """Parses a Meal_Slots cell like "breakfast|snack", falling back to the default rule when blank."""
+    if not value or not value.strip():
+        return default_meal_slots(category, location)
+    slots = [slot.strip() for slot in value.split("|")]
+    unknown = [slot for slot in slots if slot not in MEAL_SLOTS]
+    if unknown:
+        raise ValueError(f"Unknown meal slot(s) {unknown} in {value!r}; expected some of {MEAL_SLOTS}")
+    return slots
 
 
 def read_food_csv(path):
@@ -59,6 +84,7 @@ def read_food_csv(path):
                 "category": row["Category"],
                 "max_servings": int(row["Max_Servings"]),
                 "location": row["Location"],
+                "meal_slots": parse_meal_slots(row.get("Meal_Slots"), row["Category"], row["Location"]),
             }
             for row in csv.DictReader(f)
         ]
@@ -74,23 +100,25 @@ def tag_category(name):
 
 
 def read_trader_joes(path):
-    """Reads scraper output into product dicts, tagging category by keyword."""
+    """Reads scraper output into product dicts, tagging category by keyword and using default meal slots."""
     with open(path) as f:
         items = json.load(f)
-    return [
-        {
+    products = []
+    for item in items:
+        category = tag_category(item["name"])
+        products.append({
             "name": item["name"],
             "calories": item["calories"],
             "protein": item["protein"],
             "carbs": item["carbs"],
             "fat": item["fat"],
             "fiber": item["fiber"],
-            "category": tag_category(item["name"]),
+            "category": category,
             "max_servings": 3,
             "location": "Grocery",
-        }
-        for item in items
-    ]
+            "meal_slots": default_meal_slots(category, "Grocery"),
+        })
+    return products
 
 
 def collect_products(with_seeds, with_trader_joes):
@@ -114,6 +142,16 @@ def collect_products(with_seeds, with_trader_joes):
     return list(products.values())
 
 
+def backfill_meal_slots(cur):
+    """Gives rows not in this run's sources (e.g. from an older load) the default meal slots."""
+    cur.execute("SELECT name, category, location FROM products WHERE meal_slots IS NULL;")
+    for name, category, location in cur.fetchall():
+        cur.execute(
+            "UPDATE products SET meal_slots = %s WHERE name = %s;",
+            (default_meal_slots(category, location), name),
+        )
+
+
 def setup(with_seeds=False, with_trader_joes=False):
     products = collect_products(with_seeds, with_trader_joes)
 
@@ -123,6 +161,7 @@ def setup(with_seeds=False, with_trader_joes=False):
             with open(SCHEMA_PATH) as f:
                 cur.execute(f.read())
             cur.executemany(UPSERT_QUERY, products)
+            backfill_meal_slots(cur)
             cur.execute("SELECT count(*) FROM products;")
             total = cur.fetchone()[0]
     finally:
