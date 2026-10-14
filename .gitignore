@@ -13,3 +13,5 @@ __pycache__/
 # Environment/DB
 .env
 nutrition_db/
+# Generated output
+benchmark_results.json
