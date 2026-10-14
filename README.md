@@ -43,7 +43,21 @@ The serving cap is `min(max_servings, 3)` for main meals and 1 for snacks.
 
 *Why proving optimality takes longer than finding the plan.* Solvers prove optimality with a lower bound from the problem's continuous relaxation, where servings may be fractional. With fractional servings the targets can usually be hit exactly, so that bound stays at 0 for most of the search. The solver then has to rule out every branch before the bound reaches the best penalty it found. In the benchmark below, the 1-second runs already returned the proven optimum for 53% of the targets proven optimal, but the median time to prove optimality was 2.0s. For the same reason, the 0.5% gap rarely ends a search early: measured against a bound near 0, the gap stays near 100% until the proof completes.
 
-**Heuristic baseline.** `solver.py` keeps the original randomized search: 50,000 iterations of building a random plan with the same meal structure and keeping the lowest-penalty one. It is the baseline in the benchmark and its tests remain. `solver.py` also still provides `load_food_data()`, which the app uses to load foods, and `run_restaurant_solver()`, which the Eating Out tab's "Hack My Menu" uses to build a single restaurant order by random search.
+**Restaurant orders.** The Eating Out tab's "Hack My Menu" builds one Chipotle or CAVA order for the macros you have left, using `optimizer.optimize_restaurant_order` with `time_limit=1`. It shares the daily plan's model-building pieces: one-hot serving variables, the over/under objective, solver selection and status. Each restaurant item has a component type: `base`, `protein`, `beans`, `topping` or `sauce`. An order follows these rules:
+- 1–2 bases and 1–2 proteins, each at 1–2 servings (capped by the item's `max_servings`);
+- at most 1 beans;
+- at most 4 toppings and sauces combined;
+- every non-base, non-protein item at a single serving, and each item used at most once.
+
+The objective has the same weights as the daily plan, but no fiber term or fiber cap. The reported `penalty` uses `solver.order_penalty`, the formula of the original restaurant heuristic. The app shows the same status line as the home tab. With one base per menu and a handful of items, orders are proven optimal in a few hundredths of a second.
+
+*How it compares to the heuristic.* Under the same rules, the MILP matches or beats the heuristic. On the 16 test targets (8 per restaurant), it tied `run_restaurant_solver(rules=True)` every time and was never worse. That's expected: the menus are small enough that 50,000 random rule-following orders usually find the optimum too, and the MILP proves it. The original, unconstrained heuristic did report lower penalties on 12 of those 16 targets, but every one of those orders was invalid under the rules: double servings of a sauce or beans, no base, or no protein. Its lower scores came from orders the app no longer allows, not from better choices. `tests/test_optimizer.py` checks both things: every MILP order follows the rules, and the unconstrained heuristic only wins by breaking them.
+
+**Heuristic baselines.** `solver.py` keeps the original randomized searches.
+- `run_heuristic_solver()`: 50,000 iterations of building a random daily plan with the same meal structure, keeping the lowest-penalty one. It's the baseline in the benchmark.
+- `run_restaurant_solver()`: random orders of 2–5 items at 1–2 servings each, ignoring component types. With `rules=True` it samples only orders that follow the same structure rules as the MILP. The rules are defined once in `solver.py` (`ORDER_COMPONENT_LIMITS` and friends) and used by both.
+
+Their tests remain. The app still uses `solver.load_food_data()` to load foods.
 
 **Data.**
 - `food_data.csv` is the main dataset: grocery staples plus Chipotle and CAVA items, each tagged with a `location`.
@@ -52,7 +66,9 @@ The serving cap is `min(max_servings, 3)` for main meals and 1 for snacks.
 
 Every CSV has a `Meal_Slots` column listing the meals a food may appear in, separated by `|` (e.g. `breakfast|snack`); valid slots are `breakfast`, `lunch`, `dinner` and `snack`. Adding a food is a data change only. If `Meal_Slots` is blank, or for Trader Joe's items (which have none), a default applies: restaurant items and `lean_protein` foods go to `lunch|dinner`, and everything else to all four slots. `scripts/setup_db.py` loads `food_data.csv` by default and the other two sources on request.
 
-**Database.** Food data lives in PostgreSQL, in a single `products` table defined in `schema.sql`, with columns for name, calories, protein, carbs, fat, fiber, category, max_servings, location and meal_slots. The app checks the connection at startup and reads this table each time a plan is generated.
+Every CSV also has a `Component_Type` column. Each restaurant item needs one of `base`, `protein`, `beans`, `topping` or `sauce`, and `setup_db.py` rejects a missing or unknown value. Grocery items leave it blank.
+
+**Database.** Food data lives in PostgreSQL, in a single `products` table defined in `schema.sql`, with columns for name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots and component_type. The app checks the connection at startup and reads this table each time a plan is generated.
 
 ## Benchmark
 
@@ -110,15 +126,15 @@ See `requirements.txt` and `requirements-dev.txt` for pinned versions.
 
 | File | Purpose |
 |---|---|
-| `app.py` | Streamlit UI. Has the TDEE calculator sidebar and macro target sliders. The "Home Cooking Plan" tab runs `optimizer.optimize_meal_plan` (1s limit) and shows the meal plan, macro breakdown and solver status. The "Eating Out Plan" tab has the restaurant order calculator and "Hack My Menu" auto-builder. |
-| `optimizer.py` | The MILP meal-plan optimizer: eligible food/meal placements, one-hot serving variables, meal-structure and fiber constraints, linearized weighted-deviation objective, HiGHS/CBC selection, heuristic warm start. |
-| `solver.py` | The heuristic meal-plan search, kept as the benchmark baseline. Also provides `load_food_data()` (used by the app), `plan_penalty()` (shared with `optimizer.py`) and `run_restaurant_solver()` (the Eating Out tab). |
+| `app.py` | Streamlit UI. Has the TDEE calculator sidebar and macro target sliders. The "Home Cooking Plan" tab runs `optimizer.optimize_meal_plan` (1s limit) and shows the meal plan, macro breakdown and solver status. The "Eating Out Plan" tab has the restaurant order calculator and the "Hack My Menu" auto-builder, which runs `optimizer.optimize_restaurant_order` (1s limit). |
+| `optimizer.py` | The MILP optimizers. `optimize_meal_plan` covers the daily plan: eligible food/meal placements, meal-structure and fiber constraints, heuristic warm start. `optimize_restaurant_order` covers a single restaurant order with component-type rules. Both share one-hot serving variables, the linearized weighted-deviation objective and HiGHS/CBC selection. |
+| `solver.py` | The heuristic meal-plan and restaurant-order searches, kept as baselines. Also provides `load_food_data()` (used by the app), the `plan_penalty()` and `order_penalty()` formulas, and the restaurant order rules, all shared with `optimizer.py`. |
 | `calculator.py` | TDEE (Mifflin-St Jeor) and macro-target math: BMR → TDEE by activity level → goal adjustment, protein estimate by bodyweight/goal, and fat/carb split from remaining calories. |
 | `scraper.py` | Scrapes a Trader Joe's category page with Playwright/BeautifulSoup, then calls the Gemini API to estimate nutrition macros for each item and writes `trader_joes_macros.json`. |
 | `db.py` | Shared `get_connection()` helper. Opens the Postgres connection from `DATABASE_URL` if set, otherwise from `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` (with local defaults). Used by `app.py`, `solver.py`, `scripts/setup_db.py` and `scripts/check_db.py`. |
 | `schema.sql` | Final `products` table schema. Idempotent; also upgrades tables created by the old migration scripts. |
 | `docker-compose.yml` | Local `postgres:16` on host port 5433, configured from the same `DB_*` variables as `db.py`. |
-| `food_data.csv` | Main food dataset (grocery + restaurant items), loaded by default. |
+| `food_data.csv` | Main food dataset (grocery + restaurant items, with restaurant component types), loaded by default. |
 | `data/*.csv` | Curated staple proteins and carbs (same columns as `food_data.csv`), loaded with `--with-seeds`. |
 | `trader_joes_macros.json` | Scraper output (Trader Joe's items), loaded with `--with-trader-joes`. |
 | `scripts/setup_db.py` | One-step database setup: applies `schema.sql`, then upserts the food data by name, so it's safe to re-run. |

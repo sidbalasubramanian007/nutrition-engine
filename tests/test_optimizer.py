@@ -194,3 +194,103 @@ def test_hitting_the_time_limit_returns_the_best_plan_found_as_feasible():
     assert result["status"] == "feasible"
     assert result["penalty"] is not None
     assert len(result["items"]) >= 7
+
+
+
+# --- restaurant orders ---
+
+def restaurant_menu(restaurant):
+    return [f for f in setup_db.read_food_csv(setup_db.FOOD_DATA_PATH) if f["location"] == restaurant]
+
+
+def meal_targets(count, seed):
+    """Per-meal targets roughly a third of the benchmark's daily ranges."""
+    rng = random.Random(seed)
+    targets = []
+    for _ in range(count):
+        calories = rng.randint(450, 1300)
+        protein = rng.randint(30, 90)
+        fat = round(calories * rng.uniform(0.20, 0.40) / 9)
+        carbs = max(10, round((calories - 4 * protein - 9 * fat) / 4))
+        targets.append((calories, protein, carbs, fat))
+    return targets
+
+
+def order_rule_violations(order, by_name):
+    """Every way an order breaks the structure rules (empty list if it follows them all)."""
+    violations = []
+    names = [item["name"] for item in order["items"]]
+    if len(names) != len(set(names)):
+        violations.append("item repeated")
+    counts = {}
+    for item in order["items"]:
+        component = by_name[item["name"]]["component_type"]
+        counts[component] = counts.get(component, 0) + 1
+        max_servings = 2 if component in ("base", "protein") else 1
+        if not 1 <= item["servings"] <= max_servings:
+            violations.append(f"{item['servings']}x {component} {item['name']}")
+    if not 1 <= counts.get("base", 0) <= 2:
+        violations.append(f"{counts.get('base', 0)} bases")
+    if not 1 <= counts.get("protein", 0) <= 2:
+        violations.append(f"{counts.get('protein', 0)} proteins")
+    if counts.get("beans", 0) > 1:
+        violations.append(f"{counts['beans']} beans")
+    if counts.get("topping", 0) + counts.get("sauce", 0) > 4:
+        violations.append("more than 4 toppings + sauces")
+    return violations
+
+
+@pytest.mark.parametrize("restaurant", ["Chipotle", "CAVA"])
+def test_restaurant_orders_follow_the_structure_rules(restaurant):
+    menu = restaurant_menu(restaurant)
+    by_name = {f["name"]: f for f in menu}
+
+    for target in meal_targets(15, seed=1):
+        order = optimizer.optimize_restaurant_order(menu, *target)
+        assert order["status"] == "optimal", target
+        assert all(item["meal"] == "Order" for item in order["items"])
+        assert order_rule_violations(order, by_name) == [], target
+
+
+def test_unconstrained_heuristic_only_wins_by_breaking_the_structure_rules():
+    # Documents why the MILP is compared against run_restaurant_solver(rules=True): the
+    # original (default) heuristic ignores component types, and wherever it scores lower
+    # than the MILP, its order breaks the rules (e.g. double beans or sauces, no base).
+    rule_breaking = 0
+    for restaurant in ["Chipotle", "CAVA"]:
+        menu = restaurant_menu(restaurant)
+        by_name = {f["name"]: f for f in menu}
+        for target in meal_targets(8, seed=2):
+            random.seed(0)
+            heuristic = solver.run_restaurant_solver(menu, *target, iterations=50000)
+            order = optimizer.optimize_restaurant_order(menu, *target)
+            violations = order_rule_violations(heuristic, by_name)
+            rule_breaking += bool(violations)
+            if heuristic["penalty"] < order["penalty"] - 1e-6:
+                assert violations, (restaurant, target, heuristic["items"])
+    assert rule_breaking >= 1
+
+
+@pytest.mark.parametrize("restaurant", ["Chipotle", "CAVA"])
+def test_restaurant_order_penalty_is_never_worse_than_the_rule_following_heuristic(restaurant):
+    # The default heuristic may break the structure rules (e.g. double beans, no base), so the
+    # comparable baseline is the heuristic restricted to rule-following orders.
+    menu = restaurant_menu(restaurant)
+    for target in meal_targets(8, seed=2):
+        random.seed(0)
+        heuristic = solver.run_restaurant_solver(menu, *target, iterations=50000, rules=True)
+        order = optimizer.optimize_restaurant_order(menu, *target)
+        assert order["penalty"] <= heuristic["penalty"] + 1e-6, target
+
+
+def test_restaurant_order_penalty_uses_the_heuristics_formula():
+    order = optimizer.optimize_restaurant_order(restaurant_menu("CAVA"), 900, 60, 100, 30)
+    assert order["penalty"] == solver.order_penalty(order["macros"], 900, 60, 100, 30)
+
+
+def test_restaurant_order_without_a_base_is_infeasible():
+    menu = [f for f in restaurant_menu("Chipotle") if f["component_type"] != "base"]
+    order = optimizer.optimize_restaurant_order(menu, 900, 60, 100, 30)
+    assert order["status"] == "infeasible"
+    assert order["items"] == []
+    assert order["penalty"] is None

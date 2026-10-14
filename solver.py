@@ -6,7 +6,7 @@ def fetch_products_rows():
     """Runs the products query against Postgres and returns the raw rows."""
     conn = db.get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots FROM products;")
+    cursor.execute("SELECT name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots, component_type FROM products;")
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -27,6 +27,7 @@ def rows_to_foods(rows):
             "max_servings": int(row[7]),
             "location":     row[8],
             "meal_slots":   list(row[9]),
+            "component_type": row[10],
         })
     return foods
 
@@ -191,18 +192,51 @@ def display_meal_plan(winner):
     print(f" - Fiber:    {winner['macros']['fiber']}g")
     print("==================================================")
 
-def build_restaurant_order(foods, target_calories, target_protein, target_carbs, target_fat):
-    """Builds a single custom order from a restaurant's ingredient pool."""
-    # Pick 2 to 5 random components (e.g., meat, rice, beans, guac)
-    num_items = random.randint(2, min(5, len(foods)))
-    selected_foods = random.sample(foods, k=num_items)
+# Order structure rules, shared with optimizer.optimize_restaurant_order:
+# (min, max) distinct items per component type, plus one shared limit for toppings and sauces
+ORDER_COMPONENT_LIMITS = {"base": (1, 2), "protein": (1, 2), "beans": (0, 1)}
+ORDER_EXTRAS = ("topping", "sauce")
+ORDER_MAX_EXTRAS = 4
+
+def order_serving_cap(food):
+    """Under the order rules, bases and proteins can be doubled; everything else is a single serving."""
+    return min(food["max_servings"], 2) if food["component_type"] in ("base", "protein") else 1
+
+def sample_rule_order(foods):
+    """Random (food, servings) picks that follow the order structure rules, or None if the menu can't."""
+    picks = []
+    groups = [(c, lo, hi) for c, (lo, hi) in ORDER_COMPONENT_LIMITS.items()] + [(ORDER_EXTRAS, 0, ORDER_MAX_EXTRAS)]
+    for components, min_count, max_count in groups:
+        components = components if isinstance(components, tuple) else (components,)
+        pool = [f for f in foods if f.get("component_type") in components]
+        if len(pool) < min_count:
+            return None
+        for food in random.sample(pool, k=random.randint(min_count, min(max_count, len(pool)))):
+            picks.append((food, random.randint(1, order_serving_cap(food))))
+    return picks
+
+def build_restaurant_order(foods, target_calories, target_protein, target_carbs, target_fat, rules=False):
+    """
+    Builds a single custom order from a restaurant's ingredient pool.
+
+    By default it picks 2-5 random items at 1-2 servings each. With rules=True it only
+    samples orders that follow the order structure rules (ORDER_COMPONENT_LIMITS etc.),
+    the same ones optimizer.optimize_restaurant_order enforces, so the two are comparable.
+    """
+    if rules:
+        picks = sample_rule_order(foods)
+        if picks is None:
+            return None
+    else:
+        # Pick 2 to 5 random components (e.g., meat, rice, beans, guac)
+        num_items = random.randint(2, min(5, len(foods)))
+        # Allow up to 2 servings (e.g., double meat or double rice)
+        picks = [(food, random.randint(1, 2)) for food in random.sample(foods, k=num_items)]
     
     totals = {"calories": 0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "fiber": 0.0}
     result_items = []
     
-    for food in selected_foods:
-        # Allow up to 2 servings (e.g., double meat or double rice)
-        servings = random.randint(1, 2) 
+    for food, servings in picks:
         totals["calories"] += food["calories"] * servings
         totals["protein"]  += food["protein"]  * servings
         totals["carbs"]    += food["carbs"]    * servings
@@ -216,21 +250,25 @@ def build_restaurant_order(foods, target_calories, target_protein, target_carbs,
             "meal": "Order"
         })
         
-    penalty = (
+    penalty = order_penalty(totals, target_calories, target_protein, target_carbs, target_fat)
+    
+    totals["fiber"] = round(totals["fiber"], 1)
+    return {"items": result_items, "macros": totals, "penalty": penalty}
+
+def order_penalty(totals, target_calories, target_protein, target_carbs, target_fat):
+    """Weighted four-macro distance from a single order's targets (no fiber term, unlike plan_penalty)."""
+    return (
         abs(totals["calories"] - target_calories) * 20 +
         abs(totals["protein"]  - target_protein)  * 100 +
         abs(totals["carbs"]    - target_carbs)    * 20 +
         abs(totals["fat"]      - target_fat)      * 20
     )
-    
-    totals["fiber"] = round(totals["fiber"], 1)
-    return {"items": result_items, "macros": totals, "penalty": penalty}
 
-def run_restaurant_solver(foods, target_calories, target_protein, target_carbs, target_fat, iterations=50000):
+def run_restaurant_solver(foods, target_calories, target_protein, target_carbs, target_fat, iterations=50000, rules=False):
     best, lowest_penalty = None, float("inf")
     
     for _ in range(iterations):
-        plan = build_restaurant_order(foods, target_calories, target_protein, target_carbs, target_fat)
+        plan = build_restaurant_order(foods, target_calories, target_protein, target_carbs, target_fat, rules)
         if plan and plan["penalty"] < lowest_penalty:
             lowest_penalty = plan["penalty"]
             best = plan

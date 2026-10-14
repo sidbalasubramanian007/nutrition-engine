@@ -1,9 +1,9 @@
-Name,Calories,Protein,Carbs,Fat,Fiber,Category,Max_Servings,Location,Meal_Slots
-Jasmine Rice,200,4,45,0,1,staple,10,Grocery,lunch|dinner
-Rolled Oats,150,5,27,3,4,staple,10,Grocery,breakfast
-Sweet Potato,112,2,26,0,4,staple,10,Grocery,lunch|dinner
-Quinoa,120,4,21,2,3,staple,10,Grocery,lunch|dinner
-Bananas,105,1,27,0,3,staple,5,Grocery,breakfast|snack
-Avocado,240,3,12,22,10,staple,2,Grocery,lunch|dinner
-Almonds,160,6,6,14,3,staple,2,Grocery,snack
-Brown Rice,215,5,45,2,3.5,staple,6,Grocery,lunch|dinner
+Name,Calories,Protein,Carbs,Fat,Fiber,Category,Max_Servings,Location,Meal_Slots,Component_Type
+Jasmine Rice,200,4,45,0,1,staple,10,Grocery,lunch|dinner,
+Rolled Oats,150,5,27,3,4,staple,10,Grocery,breakfast,
+Sweet Potato,112,2,26,0,4,staple,10,Grocery,lunch|dinner,
+Quinoa,120,4,21,2,3,staple,10,Grocery,lunch|dinner,
+Bananas,105,1,27,0,3,staple,5,Grocery,breakfast|snack,
+Avocado,240,3,12,22,10,staple,2,Grocery,lunch|dinner,
+Almonds,160,6,6,14,3,staple,2,Grocery,snack,
+Brown Rice,215,5,45,2,3.5,staple,6,Grocery,lunch|dinner,

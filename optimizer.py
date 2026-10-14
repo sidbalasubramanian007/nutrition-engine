@@ -11,7 +11,7 @@ import solver
 
 try:
     import highspy
-except ImportError:  # HiGHS is optional; optimize_meal_plan falls back to CBC
+except ImportError:  # HiGHS is optional; the optimizers fall back to CBC
     highspy = None
 
 # (display name used in plan items, slot name used in food["meal_slots"])
@@ -152,6 +152,61 @@ def total_range(foods, pairs, macro):
     return low, high
 
 
+def add_deviation_objective(prob, totals, targets, ranges):
+    """
+    Sets the objective to the weighted absolute deviation from the targets (solver.py's weights).
+
+    |total - target| = over + under, with both nonnegative, bounded by the reachable
+    (low, high) totals in ranges, and minimized. Returns {macro: (over, under)}.
+    """
+    objective, deviation = [], {}
+    for macro in MACROS:
+        low, high = ranges[macro]
+        over = prob.add_variable(f"over_{macro}", 0, max(0, high - targets[macro]))
+        under = prob.add_variable(f"under_{macro}", 0, max(0, targets[macro] - low))
+        deviation[macro] = (over, under)
+        prob += totals[macro] - targets[macro] == over - under
+        objective.append(MACRO_WEIGHTS[macro] * (over + under))
+    prob += pulp.lpSum(objective)
+    return deviation
+
+
+def solve(prob, solver_name, time_limit, gap_rel, warm=False):
+    """Solves prob; returns "optimal" (proven within gap_rel), "feasible" (time limit hit first) or "infeasible"."""
+    prob.solve(make_solver(solver_name, time_limit, gap_rel, warm))
+    if prob.sol_status == pulp.LpSolutionOptimal:
+        return "optimal"
+    if prob.sol_status == pulp.LpSolutionIntegerFeasible:
+        return "feasible"
+    return "infeasible"
+
+
+def one_hot_servings(prob, keys, caps):
+    """
+    One binary per (key, serving count): z[key][k] = 1 means k servings. Returns (z, servings, used),
+    where servings and used are expressions over z. Avoids y <= s <= cap*y linking constraints,
+    which made the model ~3x slower.
+    """
+    z, servings, used = {}, {}, {}
+    for n, key in enumerate(keys):
+        z[key] = {k: prob.add_variable(f"z_{n}_{k}", cat="Binary") for k in range(1, caps[key] + 1)}
+        if len(z[key]) > 1:
+            prob += pulp.lpSum(z[key].values()) <= 1
+        servings[key] = pulp.lpSum(k * v for k, v in z[key].items())
+        used[key] = pulp.lpSum(z[key].values())
+    return z, servings, used
+
+
+def chosen_servings(keys, servings):
+    """{key: servings} for every key the solved model actually uses."""
+    chosen = {}
+    for key in keys:
+        count = int(round(pulp.value(servings[key]) or 0))
+        if count > 0:
+            chosen[key] = count
+    return chosen
+
+
 def optimize_meal_plan(foods, target_calories, target_protein, target_carbs, target_fat,
                        restaurant=None, restaurant_meal=None, time_limit=10, gap_rel=0.005,
                        solver_name=None, warm_start_iterations=2000):
@@ -177,17 +232,8 @@ def optimize_meal_plan(foods, target_calories, target_protein, target_carbs, tar
     targets = {"calories": target_calories, "protein": target_protein, "carbs": target_carbs, "fat": target_fat}
     prob = pulp.LpProblem("meal_plan", pulp.LpMinimize)
 
-    # One binary per (food, meal, serving count): z[f, m][k] = 1 means k servings of f in m.
-    # Servings s and "used" y are expressions over them. This avoids the y <= s <= cap*y
-    # linking constraints and gives a much tighter model (~3x faster than integer s + binary y).
-    z, s, y = {}, {}, {}
-    for n, (i, meal) in enumerate(pairs):
-        z[i, meal] = {k: prob.add_variable(f"z_{n}_{k}", cat="Binary")
-                      for k in range(1, serving_cap(foods[i], meal) + 1)}
-        if len(z[i, meal]) > 1:
-            prob += pulp.lpSum(z[i, meal].values()) <= 1
-        s[i, meal] = pulp.lpSum(k * v for k, v in z[i, meal].items())
-        y[i, meal] = pulp.lpSum(z[i, meal].values())
+    # z[f, m][k] = 1 means k servings of food f in meal m
+    z, s, y = one_hot_servings(prob, pairs, {(i, m): serving_cap(foods[i], m) for i, m in pairs})
 
     def used(meal, category=None):
         return pulp.lpSum(y[i, m] for (i, m) in pairs
@@ -214,16 +260,8 @@ def optimize_meal_plan(foods, target_calories, target_protein, target_carbs, tar
 
     prob += total("fiber") <= MAX_FIBER
 
-    # |total - target| = over + under, with both nonnegative, bounded by the reachable totals, and minimized
-    objective, deviation = [], {}
-    for macro in MACROS:
-        low, high = total_range(foods, pairs, macro)
-        over = prob.add_variable(f"over_{macro}", 0, max(0, high - targets[macro]))
-        under = prob.add_variable(f"under_{macro}", 0, max(0, targets[macro] - low))
-        deviation[macro] = (over, under)
-        prob += total(macro) - targets[macro] == over - under
-        objective.append(MACRO_WEIGHTS[macro] * (over + under))
-    prob += pulp.lpSum(objective)
+    deviation = add_deviation_objective(prob, {m: total(m) for m in MACROS}, targets,
+                                        {m: total_range(foods, pairs, m) for m in MACROS})
 
     # Warm start only helps HiGHS (2.9s -> 2.4s); it made CBC slightly slower, so CBC skips it.
     warm = False
@@ -231,22 +269,12 @@ def optimize_meal_plan(foods, target_calories, target_protein, target_carbs, tar
         plan = heuristic_start(foods, targets, restaurant, restaurant_meal, warm_start_iterations)
         warm = plan is not None and set_initial_values(foods, pairs, plan, z, deviation, targets)
 
-    prob.solve(make_solver(solver_name, time_limit, gap_rel, warm))
+    status = solve(prob, solver_name, time_limit, gap_rel, warm)
     solve_time = time.perf_counter() - start
-
-    if prob.sol_status == pulp.LpSolutionOptimal:
-        status = "optimal"
-    elif prob.sol_status == pulp.LpSolutionIntegerFeasible:
-        status = "feasible"
-    else:
+    if status == "infeasible":
         return infeasible_result(solve_time, solver_name)
 
-    servings = {}
-    for key in pairs:
-        count = int(round(pulp.value(s[key]) or 0))
-        if count > 0:
-            servings[key] = count
-
+    servings = chosen_servings(pairs, s)
     result = build_result(foods, servings, target_calories, target_protein, target_carbs, target_fat)
     result["status"] = status
     result["solve_time"] = solve_time
@@ -271,3 +299,85 @@ def set_initial_values(foods, pairs, plan, z, deviation, targets):
         over.setInitialValue(max(0, diff))
         under.setInitialValue(max(0, -diff))
     return True
+
+
+# --- Restaurant orders -------------------------------------------------------
+
+# Structure rules come from solver.py so the rules-following heuristic baseline matches exactly
+COMPONENT_LIMITS = solver.ORDER_COMPONENT_LIMITS
+EXTRAS = solver.ORDER_EXTRAS
+MAX_EXTRAS = solver.ORDER_MAX_EXTRAS
+order_serving_cap = solver.order_serving_cap
+# Display order of an order's items
+COMPONENT_ORDER = ["base", "protein", "beans", "topping", "sauce"]
+
+
+def order_total_range(foods, items, macro):
+    """Lowest and highest possible total of a macro for one order, given the component limits."""
+    low = high = 0.0
+    for component, (min_count, max_count) in COMPONENT_LIMITS.items():
+        values = sorted(foods[i][macro] for i in items if foods[i]["component_type"] == component)
+        doubled = sorted(foods[i][macro] * order_serving_cap(foods[i])
+                         for i in items if foods[i]["component_type"] == component)
+        low += sum(values[:min_count])
+        high += sum(doubled[-max_count:]) if max_count else 0
+    extras = sorted(foods[i][macro] for i in items if foods[i]["component_type"] in EXTRAS)
+    high += sum(extras[-MAX_EXTRAS:])
+    return low, high
+
+
+def optimize_restaurant_order(foods, target_calories, target_protein, target_carbs, target_fat,
+                              time_limit=1, gap_rel=0.005, solver_name=None):
+    """
+    Builds the single restaurant order with the lowest solver.order_penalty, as an integer program.
+
+    foods is one restaurant's menu (items without a component_type are ignored). An order has
+    1-2 bases and 1-2 proteins (1-2 servings each), at most 1 beans, and at most 4 toppings and
+    sauces combined (1 serving each); each item appears at most once. Returns
+    solver.run_restaurant_solver's dict shape plus "status", "solve_time" and "solver",
+    with the same meaning as in optimize_meal_plan.
+    """
+    start = time.perf_counter()
+    solver_name = solver_name or default_solver()
+    items = [i for i, f in enumerate(foods) if f.get("component_type") in COMPONENT_ORDER]
+
+    def of_type(*components):
+        return [i for i in items if foods[i]["component_type"] in components]
+
+    if any(len(of_type(c)) < min_count for c, (min_count, _) in COMPONENT_LIMITS.items()):
+        return infeasible_result(time.perf_counter() - start, solver_name)
+
+    targets = {"calories": target_calories, "protein": target_protein, "carbs": target_carbs, "fat": target_fat}
+    prob = pulp.LpProblem("restaurant_order", pulp.LpMinimize)
+
+    # z[i][k] = 1 means k servings of item i; one variable group per item, so each is used at most once
+    _, s, y = one_hot_servings(prob, items, {i: order_serving_cap(foods[i]) for i in items})
+
+    for component, (min_count, max_count) in COMPONENT_LIMITS.items():
+        count = pulp.lpSum(y[i] for i in of_type(component))
+        if min_count:
+            prob += count >= min_count
+        prob += count <= max_count
+    prob += pulp.lpSum(y[i] for i in of_type(*EXTRAS)) <= MAX_EXTRAS
+
+    totals = {m: pulp.lpSum(foods[i][m] * s[i] for i in items) for m in MACROS}
+    add_deviation_objective(prob, totals, targets, {m: order_total_range(foods, items, m) for m in MACROS})
+
+    status = solve(prob, solver_name, time_limit, gap_rel)
+    solve_time = time.perf_counter() - start
+    if status == "infeasible":
+        return infeasible_result(solve_time, solver_name)
+
+    servings = chosen_servings(items, s)
+    result_items = []
+    order_totals = {"calories": 0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "fiber": 0.0}
+    for i in sorted(servings, key=lambda i: (COMPONENT_ORDER.index(foods[i]["component_type"]), i)):
+        food, count = foods[i], servings[i]
+        for key in order_totals:
+            order_totals[key] += food[key] * count
+        result_items.append({"name": food["name"], "servings": count, "category": food["category"], "meal": "Order"})
+
+    penalty = solver.order_penalty(order_totals, target_calories, target_protein, target_carbs, target_fat)
+    order_totals["fiber"] = round(order_totals["fiber"], 1)
+    return {"items": result_items, "macros": order_totals, "penalty": penalty,
+            "status": status, "solve_time": solve_time, "solver": solver_name}

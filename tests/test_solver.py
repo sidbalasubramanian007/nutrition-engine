@@ -12,25 +12,25 @@ LUNCH_DINNER = ["lunch", "dinner"]
 
 def test_rows_to_foods_transforms_rows_matching_the_products_query_shape():
     # Column order matches fetch_products_rows()'s SELECT:
-    # name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots
+    # name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots, component_type
     rows = [
-        ("Chicken Breast", 110, 23, 0, 2, 0.0, "lean_protein", 6, "Grocery", ["lunch", "dinner"]),
-        ("Chipotle White Rice", 210, 4, 40, 4, 1.0, "staple", 2, "Chipotle", ["lunch", "dinner"]),
+        ("Chicken Breast", 110, 23, 0, 2, 0.0, "lean_protein", 6, "Grocery", ["lunch", "dinner"], None),
+        ("Chipotle White Rice", 210, 4, 40, 4, 1.0, "staple", 2, "Chipotle", ["lunch", "dinner"], "base"),
     ]
     assert solver.rows_to_foods(rows) == [
         {"name": "Chicken Breast", "calories": 110, "protein": 23, "carbs": 0, "fat": 2,
          "fiber": 0.0, "category": "lean_protein", "max_servings": 6, "location": "Grocery",
-         "meal_slots": ["lunch", "dinner"]},
+         "meal_slots": ["lunch", "dinner"], "component_type": None},
         {"name": "Chipotle White Rice", "calories": 210, "protein": 4, "carbs": 40, "fat": 4,
          "fiber": 1.0, "category": "staple", "max_servings": 2, "location": "Chipotle",
-         "meal_slots": ["lunch", "dinner"]},
+         "meal_slots": ["lunch", "dinner"], "component_type": "base"},
     ]
 
 
 def test_rows_to_foods_coerces_fiber_to_float():
     # fiber is stored as Postgres FLOAT but psycopg2 can hand back int-like values
     # (e.g. whole-number fiber); rows_to_foods explicitly coerces it to float.
-    rows = [("Egg Whites", 50, 11, 0, 0, 0, "lean_protein", 8, "Grocery", ["breakfast"])]
+    rows = [("Egg Whites", 50, 11, 0, 0, 0, "lean_protein", 8, "Grocery", ["breakfast"], None)]
     foods = solver.rows_to_foods(rows)
     assert foods[0]["fiber"] == 0.0
     assert isinstance(foods[0]["fiber"], float)
@@ -286,3 +286,34 @@ def test_steak_and_salmon_never_land_in_breakfast_across_many_plans(restaurant, 
         plan = solver.build_meal_plan(foods, 2800, 170, 390, 68, restaurant, restaurant_meal)
         breakfast = [item["name"] for item in plan["items"] if item["meal"] == "Breakfast"]
         assert not any("Steak" in name or "Salmon" in name for name in breakfast), breakfast
+
+
+
+# --- restaurant orders ---
+
+def restaurant_menu(restaurant):
+    import setup_db
+    return [f for f in setup_db.read_food_csv(setup_db.FOOD_DATA_PATH) if f["location"] == restaurant]
+
+
+@pytest.mark.parametrize("restaurant", ["Chipotle", "CAVA"])
+def test_rules_mode_only_builds_orders_that_follow_the_structure_rules(restaurant):
+    menu = restaurant_menu(restaurant)
+    by_name = {f["name"]: f for f in menu}
+    random.seed(0)
+    for _ in range(500):
+        order = solver.build_restaurant_order(menu, 900, 60, 100, 30, rules=True)
+        counts = {}
+        for item in order["items"]:
+            food = by_name[item["name"]]
+            counts[food["component_type"]] = counts.get(food["component_type"], 0) + 1
+            assert 1 <= item["servings"] <= solver.order_serving_cap(food)
+        assert 1 <= counts.get("base", 0) <= 2
+        assert 1 <= counts.get("protein", 0) <= 2
+        assert counts.get("beans", 0) <= 1
+        assert counts.get("topping", 0) + counts.get("sauce", 0) <= 4
+
+
+def test_rules_mode_returns_none_when_the_menu_has_no_base():
+    menu = [f for f in restaurant_menu("Chipotle") if f["component_type"] != "base"]
+    assert solver.build_restaurant_order(menu, 900, 60, 100, 30, rules=True) is None

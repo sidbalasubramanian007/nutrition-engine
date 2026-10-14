@@ -11,6 +11,9 @@ food_data.csv wins over the seed files, which win over the Trader Joe's data.
 Meal slots come from each CSV's Meal_Slots column (e.g. "breakfast|snack"). Rows
 without one (Trader Joe's items, blank cells, leftovers from older loads) get the
 default rule in default_meal_slots().
+
+Restaurant items need a Component_Type (base, protein, beans, topping or sauce),
+which optimizer.optimize_restaurant_order builds orders from; grocery items leave it blank.
 """
 import argparse
 import csv
@@ -35,10 +38,11 @@ BAKERY_KEYWORDS = ['Muffin', 'Bread', 'Cake', 'Blondie', 'Pretzel', 'Pancake', '
 PROTEIN_KEYWORDS = ['Chicken', 'Salmon', 'Turkey', 'Yogurt', 'Tofu']
 
 MEAL_SLOTS = ["breakfast", "lunch", "dinner", "snack"]
+COMPONENT_TYPES = ["base", "protein", "beans", "topping", "sauce"]
 
 UPSERT_QUERY = """
-INSERT INTO products (name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots)
-VALUES (%(name)s, %(calories)s, %(protein)s, %(carbs)s, %(fat)s, %(fiber)s, %(category)s, %(max_servings)s, %(location)s, %(meal_slots)s)
+INSERT INTO products (name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots, component_type)
+VALUES (%(name)s, %(calories)s, %(protein)s, %(carbs)s, %(fat)s, %(fiber)s, %(category)s, %(max_servings)s, %(location)s, %(meal_slots)s, %(component_type)s)
 ON CONFLICT (name) DO UPDATE SET
     calories     = EXCLUDED.calories,
     protein      = EXCLUDED.protein,
@@ -48,7 +52,8 @@ ON CONFLICT (name) DO UPDATE SET
     category     = EXCLUDED.category,
     max_servings = EXCLUDED.max_servings,
     location     = EXCLUDED.location,
-    meal_slots   = EXCLUDED.meal_slots;
+    meal_slots   = EXCLUDED.meal_slots,
+    component_type = EXCLUDED.component_type;
 """
 
 
@@ -70,6 +75,18 @@ def parse_meal_slots(value, category, location):
     return slots
 
 
+def parse_component_type(value, name, location):
+    """Validates a Component_Type cell: required for restaurant items, blank (None) for grocery items."""
+    value = (value or "").strip()
+    if not value:
+        if location != "Grocery":
+            raise ValueError(f"{name!r} ({location}) needs a Component_Type, one of {COMPONENT_TYPES}")
+        return None
+    if value not in COMPONENT_TYPES:
+        raise ValueError(f"Unknown Component_Type {value!r} for {name!r}; expected one of {COMPONENT_TYPES}")
+    return value
+
+
 def read_food_csv(path):
     """Reads a CSV with food_data.csv's header into product dicts."""
     with open(path, newline="") as f:
@@ -85,6 +102,7 @@ def read_food_csv(path):
                 "max_servings": int(row["Max_Servings"]),
                 "location": row["Location"],
                 "meal_slots": parse_meal_slots(row.get("Meal_Slots"), row["Category"], row["Location"]),
+                "component_type": parse_component_type(row.get("Component_Type"), row["Name"], row["Location"]),
             }
             for row in csv.DictReader(f)
         ]
@@ -117,6 +135,7 @@ def read_trader_joes(path):
             "max_servings": 3,
             "location": "Grocery",
             "meal_slots": default_meal_slots(category, "Grocery"),
+            "component_type": None,
         })
     return products
 

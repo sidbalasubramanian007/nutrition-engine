@@ -1,14 +1,14 @@
-Name,Calories,Protein,Carbs,Fat,Fiber,Category,Max_Servings,Location,Meal_Slots
-Organic Boneless Skinless Chicken Breast,110,23,0,2,0,lean_protein,3,Grocery,lunch|dinner
-Lean Ground Turkey (93/7),160,22,0,8,0,lean_protein,3,Grocery,lunch|dinner
-Nonfat Plain Greek Yogurt,90,16,5,0,0,lean_protein,3,Grocery,breakfast|snack
-Chicken Breast,110,23,0,2,0,lean_protein,6,Grocery,lunch|dinner
-Wild Sockeye Salmon,130,21,0,4,0,lean_protein,4,Grocery,dinner
-Egg Whites,50,11,0,0,0,lean_protein,8,Grocery,breakfast
-0% Greek Yogurt,90,16,5,0,0,lean_protein,5,Grocery,breakfast|snack
-Lean Ground Turkey,160,22,0,8,0,lean_protein,4,Grocery,lunch|dinner
-Whey Protein Powder,120,24,3,1,0,lean_protein,2,Grocery,breakfast|snack
-Organic Firm Tofu,130,14,3,7,2,lean_protein,4,Grocery,lunch|dinner
-Sirloin Steak,200,30,0,8,0,lean_protein,3,Grocery,dinner
-Cod Fillet,100,20,0,1,0,lean_protein,4,Grocery,lunch|dinner
-Shrimp,100,20,0,1,0,lean_protein,4,Grocery,lunch|dinner
+Name,Calories,Protein,Carbs,Fat,Fiber,Category,Max_Servings,Location,Meal_Slots,Component_Type
+Organic Boneless Skinless Chicken Breast,110,23,0,2,0,lean_protein,3,Grocery,lunch|dinner,
+Lean Ground Turkey (93/7),160,22,0,8,0,lean_protein,3,Grocery,lunch|dinner,
+Nonfat Plain Greek Yogurt,90,16,5,0,0,lean_protein,3,Grocery,breakfast|snack,
+Chicken Breast,110,23,0,2,0,lean_protein,6,Grocery,lunch|dinner,
+Wild Sockeye Salmon,130,21,0,4,0,lean_protein,4,Grocery,dinner,
+Egg Whites,50,11,0,0,0,lean_protein,8,Grocery,breakfast,
+0% Greek Yogurt,90,16,5,0,0,lean_protein,5,Grocery,breakfast|snack,
+Lean Ground Turkey,160,22,0,8,0,lean_protein,4,Grocery,lunch|dinner,
+Whey Protein Powder,120,24,3,1,0,lean_protein,2,Grocery,breakfast|snack,
+Organic Firm Tofu,130,14,3,7,2,lean_protein,4,Grocery,lunch|dinner,
+Sirloin Steak,200,30,0,8,0,lean_protein,3,Grocery,dinner,
+Cod Fillet,100,20,0,1,0,lean_protein,4,Grocery,lunch|dinner,
+Shrimp,100,20,0,1,0,lean_protein,4,Grocery,lunch|dinner,

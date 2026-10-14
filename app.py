@@ -58,8 +58,17 @@ target_carbs = st.sidebar.slider("Target Carbs (g)",     50,  600, st.session_st
 target_fat   = st.sidebar.slider("Target Fat (g)",       20,  150, st.session_state.target_fat)
 
 
-# Solver time budget for home plans; the best plan found so far is returned if not yet proven optimal
+# Solver time budget for home plans and restaurant orders; the best result found so far is
+# returned if not yet proven optimal
 HOME_PLAN_TIME_LIMIT = 1
+RESTAURANT_ORDER_TIME_LIMIT = 1
+
+def show_solver_status(result, time_limit):
+    """Status line under a macro breakdown for an optimal or feasible optimizer result."""
+    if result['status'] == "optimal":
+        st.caption(f"Proven optimal · solved in {result['solve_time']:.2f}s")
+    else:
+        st.caption(f"Best plan found in {time_limit}s (not yet proven optimal)")
 
 # 5. MAIN CONTENT - TWO DISTINCT MODES
 tab_grocery, tab_restaurant = st.tabs(["🍳 Home Cooking Plan", "🥗 Eating Out Plan"])
@@ -103,10 +112,7 @@ with tab_grocery:
                         st.metric("Fat",      f"{winner['macros']['fat']}g",
                                   delta=f"{winner['macros']['fat'] - target_fat:+.0f}g vs target")
                         st.metric("Fiber",    f"{winner['macros']['fiber']}g")
-                        if winner['status'] == "optimal":
-                            st.caption(f"Proven optimal · solved in {winner['solve_time']:.2f}s")
-                        else:
-                            st.caption(f"Best plan found in {HOME_PLAN_TIME_LIMIT}s (not yet proven optimal)")
+                        show_solver_status(winner, HOME_PLAN_TIME_LIMIT)
                 else:
                     st.error(
                         "No meal plan fits the meal structure (a staple and a protein at breakfast, lunch "
@@ -168,7 +174,7 @@ with tab_restaurant:
                     st.metric("Fiber", f"{order_totals['fiber']:.1f}g")
 
         else:
-            # The Heuristic Auto-Builder
+            # The MILP Auto-Builder
             st.caption("Input the macros you have left for the day, and the engine will hack the menu to build the perfect order.")
             
             colA, colB, colC, colD = st.columns(4)
@@ -179,9 +185,12 @@ with tab_restaurant:
             
             if st.button("Hack My Menu"):
                 with st.spinner(f"Optimizing {restaurant} menu..."):
-                    winner = solver.run_restaurant_solver(rest_foods, meal_cal, meal_prot, meal_carb, meal_fat)
+                    winner = optimizer.optimize_restaurant_order(
+                        rest_foods, meal_cal, meal_prot, meal_carb, meal_fat,
+                        time_limit=RESTAURANT_ORDER_TIME_LIMIT,
+                    )
                     
-                    if winner:
+                    if winner['status'] != "infeasible":
                         col1, col2 = st.columns(2)
                         with col1:
                             st.subheader("Your Custom Order")
@@ -197,5 +206,10 @@ with tab_restaurant:
                                       delta=f"{winner['macros']['carbs'] - meal_carb:+.0f}g vs target")
                             st.metric("Fat", f"{winner['macros']['fat']}g", 
                                       delta=f"{winner['macros']['fat'] - meal_fat:+.0f}g vs target")
+                            show_solver_status(winner, RESTAURANT_ORDER_TIME_LIMIT)
                     else:
-                        st.error("Could not find a valid combination.")
+                        st.error(
+                            f"No order fits the order structure (1-2 bases, 1-2 proteins, at most 1 beans, "
+                            f"at most 4 toppings and sauces) with {restaurant}'s menu items. Make sure every "
+                            f"{restaurant} item has a Component_Type, then reload with `python scripts/setup_db.py`."
+                        )
