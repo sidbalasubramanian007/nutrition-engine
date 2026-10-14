@@ -132,16 +132,20 @@ def build_meal_plan(foods, target_calories, target_protein, target_carbs, target
                 "meal":     meal_name,
             })
 
-    penalty = (
+    penalty = plan_penalty(totals, target_calories, target_protein, target_carbs, target_fat)
+
+    totals["fiber"] = round(totals["fiber"], 1)
+    return {"items": result_items, "macros": totals, "penalty": penalty}
+
+def plan_penalty(totals, target_calories, target_protein, target_carbs, target_fat):
+    """Weighted four-macro distance from the targets, plus a penalty for fiber above 35g."""
+    return (
         abs(totals["calories"] - target_calories) * 20 +
         abs(totals["protein"]  - target_protein)  * 100 +
         abs(totals["carbs"]    - target_carbs)    * 20 +
         abs(totals["fat"]      - target_fat)      * 20 +
         max(0, totals["fiber"] - 35) * 50
     )
-
-    totals["fiber"] = round(totals["fiber"], 1)
-    return {"items": result_items, "macros": totals, "penalty": penalty}
 
 def run_heuristic_solver(foods, target_calories=2800, target_protein=170,
                           target_carbs=390, target_fat=68, iterations=50000,

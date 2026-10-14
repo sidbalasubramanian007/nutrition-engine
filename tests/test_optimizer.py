@@ -1,0 +1,144 @@
+import random
+
+import pytest
+
+import optimizer
+import setup_db
+import solver
+
+
+def food(name, category, meal_slots, max_servings, calories, protein, carbs, fat, fiber, location="Grocery"):
+    return {"name": name, "category": category, "meal_slots": meal_slots, "max_servings": max_servings,
+            "calories": calories, "protein": protein, "carbs": carbs, "fat": fat, "fiber": fiber,
+            "location": location}
+
+
+# --- a tiny plan that can be solved by hand ---
+
+# Slots and caps force everything except two serving counts:
+#   Breakfast: Oats + EggWhites are the only breakfast staple/protein (cap 1 each).
+#   Lunch:     Potato is lunch-only, so it must be lunch's staple, leaving Rice for dinner.
+#              Chicken is the only lunch protein, so Salmon (dinner-only) is dinner's protein.
+#   Snack:     Banana is the only snack, at 1 serving.
+# Fixed part (Oats + EggWhites + Potato + Salmon + Banana):
+#   calories 545, protein 41, carbs 80, fat 7, fiber 9
+# Free: Chicken servings c in 1..3, Rice servings r in 1..3, adding
+#   calories 110c + 200r, protein 23c + 4r, carbs 45r, fat 2c, fiber r
+# Carbs pin down r and protein then pins down c, so every (c, r) has distinct macros.
+# The targets below are exactly the c=2, r=3 totals:
+#   calories 545+220+600 = 1365, protein 41+46+12 = 99, carbs 80+135 = 215, fat 7+4 = 11, fiber 9+3 = 12
+HAND_FOODS = [
+    food("Oats",      "staple",       ["breakfast"],         1, 150, 5,  27, 3, 4),
+    food("EggWhites", "lean_protein", ["breakfast"],         1, 50,  11, 0,  0, 0),
+    food("Potato",    "staple",       ["lunch"],             1, 110, 3,  26, 0, 2),
+    food("Rice",      "staple",       ["lunch", "dinner"],   3, 200, 4,  45, 0, 1),
+    food("Chicken",   "lean_protein", ["lunch", "dinner"],   3, 110, 23, 0,  2, 0),
+    food("Salmon",    "lean_protein", ["dinner"],            1, 130, 21, 0,  4, 0),
+    food("Banana",    "carb",         ["snack"],             2, 105, 1,  27, 0, 3),
+]
+
+HAND_PLAN_ITEMS = [
+    {"name": "Oats",      "servings": 1, "category": "staple",       "meal": "Breakfast"},
+    {"name": "EggWhites", "servings": 1, "category": "lean_protein", "meal": "Breakfast"},
+    {"name": "Chicken",   "servings": 2, "category": "lean_protein", "meal": "Lunch"},
+    {"name": "Potato",    "servings": 1, "category": "staple",       "meal": "Lunch"},
+    {"name": "Salmon",    "servings": 1, "category": "lean_protein", "meal": "Dinner"},
+    {"name": "Rice",      "servings": 3, "category": "staple",       "meal": "Dinner"},
+    {"name": "Banana",    "servings": 1, "category": "carb",         "meal": "Snack"},
+]
+
+
+def test_optimizer_finds_the_hand_computed_plan():
+    result = optimizer.optimize_meal_plan(HAND_FOODS, 1365, 99, 215, 11)
+
+    assert result["status"] == "optimal"
+    assert result["items"] == HAND_PLAN_ITEMS
+    assert result["macros"] == {"calories": 1365, "protein": 99.0, "carbs": 215.0, "fat": 11.0, "fiber": 12.0}
+    assert result["penalty"] == 0.0
+    assert result["solve_time"] >= 0
+
+
+def test_optimizer_uses_solver_weights_when_target_is_unreachable():
+    # Protein 100 can't be hit: 41 + 23c + 4r = 100 has no solution with c, r in 1..3.
+    # c=2, r=3 is still best (1g short -> 1 * 100 = 100); every other (c, r) misses carbs
+    # by 45g+ (900+) or protein by 22g+ (2200+), and the next best plan scores 4440.
+    result = optimizer.optimize_meal_plan(HAND_FOODS, 1365, 100, 215, 11)
+
+    assert result["items"] == HAND_PLAN_ITEMS
+    assert result["penalty"] == 100.0
+
+
+# --- structure on the real food data ---
+
+def csv_foods(restaurant=None):
+    """food_data.csv read directly (no database), filtered like solver.load_food_data."""
+    foods = setup_db.read_food_csv(setup_db.FOOD_DATA_PATH)
+    return [f for f in foods if f["location"] == "Grocery" or f["location"] == restaurant]
+
+
+@pytest.mark.parametrize("restaurant, restaurant_meal", [(None, None), ("Chipotle", "Lunch"), ("CAVA", "Dinner")])
+def test_optimizer_plan_structure_on_csv_foods(restaurant, restaurant_meal):
+    foods = csv_foods(restaurant)
+    by_name = {f["name"]: f for f in foods}
+
+    result = optimizer.optimize_meal_plan(foods, 2800, 170, 390, 68, restaurant, restaurant_meal)
+    assert result["status"] == "optimal"
+    items = result["items"]
+
+    for meal in ["Breakfast", "Lunch", "Dinner"]:
+        categories = sorted(item["category"] for item in items if item["meal"] == meal)
+        assert categories == ["lean_protein", "staple"], meal
+
+    staple = {item["meal"]: item["name"] for item in items if item["category"] == "staple" and item["meal"] != "Snack"}
+    assert staple["Lunch"] != staple["Dinner"]
+
+    snacks = [item for item in items if item["meal"] == "Snack"]
+    assert 1 <= len(snacks) <= 2
+    assert all(item["servings"] == 1 for item in snacks)
+
+    names = [item["name"] for item in items]
+    assert len(names) == len(set(names))
+
+    for item in items:
+        f = by_name[item["name"]]
+        assert item["meal"].lower() in f["meal_slots"], item
+        assert f["location"] == optimizer.meal_location(item["meal"], restaurant, restaurant_meal), item
+        assert 1 <= item["servings"] <= optimizer.serving_cap(f, item["meal"]), item
+
+    assert result["macros"]["fiber"] <= 35
+
+
+# --- infeasible inputs ---
+
+def test_no_proteins_returns_infeasible_without_raising():
+    foods = [f for f in HAND_FOODS if f["category"] != "lean_protein"]
+    result = optimizer.optimize_meal_plan(foods, 2000, 150, 250, 60)
+
+    assert result["status"] == "infeasible"
+    assert result["items"] == []
+    assert result["macros"] is None
+    assert result["penalty"] is None
+
+
+def test_fiber_cap_can_make_the_plan_infeasible():
+    # Structurally fine, but the forced breakfast staple alone exceeds 35g fiber,
+    # so only CBC (not the pre-check) can tell it's infeasible.
+    foods = [dict(f, fiber=40) if f["name"] == "Oats" else f for f in HAND_FOODS]
+    result = optimizer.optimize_meal_plan(foods, 1365, 99, 215, 11)
+
+    assert result["status"] == "infeasible"
+    assert result["items"] == []
+
+
+# --- versus the heuristic ---
+
+def test_optimizer_penalty_is_never_worse_than_the_heuristic():
+    foods = csv_foods()
+    random.seed(0)
+    heuristic = solver.run_heuristic_solver(foods, 2800, 170, 390, 68, iterations=50000)
+
+    result = optimizer.optimize_meal_plan(foods, 2800, 170, 390, 68)
+
+    assert result["status"] == "optimal"
+    # Small tolerance only for float summation order; both use solver.plan_penalty.
+    assert result["penalty"] <= heuristic["penalty"] + 1e-6
