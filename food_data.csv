@@ -10,6 +10,7 @@ Peanut Butter,190,7,8,16,2,fat,2,Grocery,breakfast|lunch|dinner|snack
 Olive Oil,120,0,0,14,0,fat,2,Grocery,breakfast|lunch|dinner|snack
 Whole Milk Greek Yogurt,130,9,6,8,0,lean_protein,2,Grocery,breakfast|snack
 Whey Protein Powder,120,24,3,1.5,0,lean_protein,2,Grocery,breakfast|snack
+Lean Ground Turkey,160,22,0,8,0,lean_protein,4,Grocery,lunch|dinner
 Chipotle Chicken,180,32,0,7,0,lean_protein,2,Chipotle,lunch|dinner
 Chipotle Steak,150,21,1,6,0,lean_protein,2,Chipotle,lunch|dinner
 Chipotle Carnitas,210,23,0,12,0,lean_protein,2,Chipotle,lunch|dinner
