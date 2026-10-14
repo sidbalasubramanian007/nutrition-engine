@@ -1,17 +1,7 @@
 import csv
-import os
-import psycopg2
-from dotenv import load_dotenv
+import db
 
-load_dotenv()
-
-conn = psycopg2.connect(
-    host=os.getenv("DB_HOST", "localhost"),
-    port=os.getenv("DB_PORT", 5432),
-    database=os.getenv("DB_NAME", "nutrition_db"),
-    user=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASSWORD", "")
-)
+conn = db.get_connection()
 cur = conn.cursor()
 
 # Add location column and clear old test data so we have a clean slate

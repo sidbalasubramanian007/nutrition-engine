@@ -15,8 +15,8 @@ try:
 except Exception as e:
     st.error(
         f"Could not connect to the database ({e}). Make sure PostgreSQL is running, "
-        "then set DB_HOST and DB_NAME in a .env file in the repo root (see .env.example; "
-        "defaults are localhost / nutrition_db) and restart the app."
+        "then set DATABASE_URL, or DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD, in a .env file "
+        "in the repo root (see .env.example) and restart the app."
     )
     st.stop()
 

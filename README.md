@@ -36,7 +36,7 @@ See `requirements.txt` for pinned versions.
 | `calculator.py` | TDEE (Mifflin-St Jeor) and macro-target math: BMR → TDEE by activity level → goal adjustment, protein estimate by bodyweight/goal, and fat/carb split from remaining calories. |
 | `solver.py` | The heuristic meal-plan solver: `MEAL_SLOT_MAP`, structured plan construction, serving-size selection, four-macro penalty scoring, and the iteration loop that picks the best plan. |
 | `scraper.py` | Scrapes a Trader Joe's category page with Playwright/BeautifulSoup, then calls the Gemini API to estimate nutrition macros for each item and writes `trader_joes_macros.json`. |
-| `db.py` | Shared `get_connection()` helper — opens the Postgres connection using `DB_NAME`/`DB_HOST` env vars (with local defaults), used by every script below and by `solver.py`. |
+| `db.py` | Shared `get_connection()` helper — opens the Postgres connection from `DATABASE_URL` if set, otherwise from `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` (with local defaults). Used by `app.py`, `solver.py`, `import_csv.py` and every script below. |
 | `scripts/migrate.py` | Creates the `products` table (if it doesn't exist) and loads `trader_joes_macros.json` into it. |
 | `scripts/tag_data.py` | Adds a `category` column and tags existing rows (`bakery`, `lean_protein`, or default `misc`) based on keyword matches in the product name. |
 | `scripts/migrate_limits.py` | Adds a `max_servings` column (default 3) and backfills existing rows. |
@@ -57,17 +57,31 @@ pip install -r requirements.txt
 
 ### 2. Environment variables
 
-`db.py`'s `get_connection()` reads `DB_NAME`/`DB_HOST` from the environment (via `python-dotenv`), falling back to `nutrition_db`/`localhost` if unset — so a `.env` file is only needed to point at a non-local database, or to supply the Gemini key.
+`db.py`'s `get_connection()` is the only place that opens database connections, and it reads its settings from the environment (via `python-dotenv`):
+
+- If `DATABASE_URL` is set (e.g. `postgresql://user:password@host:5432/nutrition_db` for hosted Postgres), it is used as-is and the `DB_*` variables are ignored.
+- Otherwise it uses the individual variables, falling back to local defaults:
+
+| Variable | Default |
+|---|---|
+| `DB_HOST` | `localhost` |
+| `DB_PORT` | `5432` |
+| `DB_NAME` | `nutrition_db` |
+| `DB_USER` | unset (libpq uses your OS username) |
+| `DB_PASSWORD` | empty |
 
 Create a `.env` file in the repo root (see `.env.example`):
 
 ```
 GEMINI_API_KEY=your-gemini-api-key-here
 DB_HOST=localhost
+DB_PORT=5432
 DB_NAME=nutrition_db
+DB_USER=
+DB_PASSWORD=
 ```
 
-`GEMINI_API_KEY` is only required to run `scraper.py`. `DB_HOST`/`DB_NAME` can be omitted entirely for local development — the defaults just work.
+`GEMINI_API_KEY` is only required to run `scraper.py`. The database variables can be omitted entirely for a default local Postgres install — the defaults just work.
 
 ### 3. Database setup
 
