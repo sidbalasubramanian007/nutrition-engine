@@ -1,3 +1,4 @@
+"""Randomized heuristic meal-plan solver. The app now uses optimizer.py; this stays as the benchmark baseline."""
 import random
 import db
 

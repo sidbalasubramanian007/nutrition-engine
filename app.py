@@ -1,6 +1,7 @@
 import streamlit as st
 import solver
 import calculator
+import optimizer
 import db
 from dotenv import load_dotenv
 
@@ -27,7 +28,7 @@ if 'target_carbs' not in st.session_state: st.session_state.target_carbs = 390
 if 'target_fat'   not in st.session_state: st.session_state.target_fat   = 68
 
 st.title("🍎 Nutrition Engine Optimizer")
-st.markdown("Automated meal planning using Heuristic Optimization & PostgreSQL.")
+st.markdown("Automated meal planning using Mixed-Integer Optimization & PostgreSQL.")
 
 # 3. SIDEBAR - Calculator
 st.sidebar.header("TDEE Calculator")
@@ -57,6 +58,9 @@ target_carbs = st.sidebar.slider("Target Carbs (g)",     50,  600, st.session_st
 target_fat   = st.sidebar.slider("Target Fat (g)",       20,  150, st.session_state.target_fat)
 
 
+# Solver time budget for home plans; the best plan found so far is returned if not yet proven optimal
+HOME_PLAN_TIME_LIMIT = 1
+
 # 5. MAIN CONTENT - TWO DISTINCT MODES
 tab_grocery, tab_restaurant = st.tabs(["🍳 Home Cooking Plan", "🥗 Eating Out Plan"])
 
@@ -72,11 +76,12 @@ with tab_grocery:
             foods = solver.load_food_data(mode="grocery")
             
             if foods:
-                winner = solver.run_heuristic_solver(
-                    foods, target_cal, target_prot, target_carbs, target_fat
+                winner = optimizer.optimize_meal_plan(
+                    foods, target_cal, target_prot, target_carbs, target_fat,
+                    time_limit=HOME_PLAN_TIME_LIMIT,
                 )
                 
-                if winner:
+                if winner['status'] != "infeasible":
                     col1, col2 = st.columns(2)
                     with col1:
                         st.subheader("Meal Plan")
@@ -98,8 +103,17 @@ with tab_grocery:
                         st.metric("Fat",      f"{winner['macros']['fat']}g",
                                   delta=f"{winner['macros']['fat'] - target_fat:+.0f}g vs target")
                         st.metric("Fiber",    f"{winner['macros']['fiber']}g")
+                        if winner['status'] == "optimal":
+                            st.caption(f"Proven optimal · solved in {winner['solve_time']:.2f}s")
+                        else:
+                            st.caption(f"Best plan found in {HOME_PLAN_TIME_LIMIT}s (not yet proven optimal)")
                 else:
-                    st.error("No valid meal plan found with current constraints.")
+                    st.error(
+                        "No meal plan fits the meal structure (a staple and a protein at breakfast, lunch "
+                        "and dinner, plus a snack, with fiber under 35g) using the foods currently loaded. "
+                        "Try loading more foods with `python scripts/setup_db.py --with-seeds`, "
+                        "or widen your targets."
+                    )
             else:
                 st.error("Database connected successfully, but returned empty data.")
 
