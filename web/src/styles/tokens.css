@@ -1,0 +1,39 @@
+/* Design tokens. Everything else references these variables. */
+:root {
+  /* Surfaces and text */
+  --bg: #1a1310;
+  --surface: #251c17;
+  --surface-2: #30251f;
+  --text: #f3e9dc;
+  --muted: #9c8b7e;
+
+  /* Macro colors */
+  --protein: #ff8a65;
+  --carbs: #e8b84a;
+  --fat: #b9c46a;
+  --calories: #f3e9dc;
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* Radii */
+  --radius-panel: 10px;
+  --radius-control: 6px;
+
+  /* Type: Archivo at normal width for body, condensed and heavy for big macro numbers */
+  --font: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --stretch-normal: 100%;
+  --stretch-condensed: 75%;
+  --weight-body: 400;
+  --weight-medium: 500;
+  --weight-number: 800;
+
+  /* Focus ring */
+  --focus: var(--carbs);
+}

@@ -1,0 +1,88 @@
+.app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-7) var(--space-5);
+  display: grid;
+  gap: var(--space-6);
+}
+
+.app-header {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.app-title {
+  font-size: 56px;
+  color: var(--calories);
+}
+
+.panel-title {
+  font-size: 18px;
+  margin-bottom: var(--space-4);
+}
+
+.status-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.status-row {
+  display: grid;
+  grid-template-columns: auto 96px 1fr;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-2);
+  border-radius: var(--radius-control);
+}
+
+.status-label {
+  font-weight: var(--weight-medium);
+}
+
+.status-detail {
+  color: var(--muted);
+}
+
+/* Color is never the only signal: each row also says its state in words */
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.status-dot--ok {
+  background: var(--fat);
+}
+
+.status-dot--down {
+  background: var(--protein);
+}
+
+.status-footer {
+  margin-top: var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+@media (max-width: 480px) {
+  .app {
+    padding: var(--space-6) var(--space-4);
+  }
+
+  .app-title {
+    font-size: 44px;
+  }
+
+  .status-row {
+    grid-template-columns: auto 1fr;
+  }
+
+  .status-detail {
+    grid-column: 2;
+  }
+}

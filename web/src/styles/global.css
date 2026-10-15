@@ -1,0 +1,95 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-stretch: var(--stretch-normal);
+  font-weight: var(--weight-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: var(--weight-medium);
+  line-height: 1.2;
+}
+
+p {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  font-weight: var(--weight-medium);
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  padding: var(--space-2) var(--space-4);
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--surface-2) 80%, var(--text));
+}
+
+button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+/* Visible keyboard focus on every interactive element (mouse clicks don't show it) */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Big macro numbers: condensed width, heavy weight, tabular figures */
+.number {
+  font-stretch: var(--stretch-condensed);
+  font-weight: var(--weight-number);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.panel {
+  background: var(--surface);
+  border-radius: var(--radius-panel);
+  padding: var(--space-5);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* Respect reduced motion everywhere */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

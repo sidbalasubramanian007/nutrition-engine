@@ -128,6 +128,7 @@ See `requirements.txt` and `requirements-dev.txt` for pinned versions.
 | File | Purpose |
 |---|---|
 | `app.py` | Streamlit UI. Has the TDEE calculator sidebar and macro target sliders. The "Home Cooking Plan" tab runs `optimizer.optimize_meal_plan` (1s limit) and shows the meal plan, macro breakdown and solver status. The "Eating Out Plan" tab has the restaurant order calculator and the "Hack My Menu" auto-builder, which runs `optimizer.optimize_restaurant_order` (1s limit). |
+| `web/` | React + TypeScript + Vite frontend, using plain CSS with design tokens and a typed API client. See [web/README.md](web/README.md). |
 | `api/` | FastAPI backend (`api/main.py` endpoints, `api/models.py` Pydantic models) that imports `optimizer.py`, `solver.py`, `calculator.py` and `db.py` rather than duplicating them. See [API](#api). |
 | `optimizer.py` | The MILP optimizers. `optimize_meal_plan` covers the daily plan: eligible food/meal placements, meal-structure and fiber constraints, heuristic warm start. `optimize_restaurant_order` covers a single restaurant order with component-type rules. Both share one-hot serving variables, the linearized weighted-deviation objective and HiGHS/CBC selection. |
 | `solver.py` | The heuristic meal-plan and restaurant-order searches, kept as baselines. Also provides `load_food_data()` (used by the app), the `plan_penalty()` and `order_penalty()` formulas, and the restaurant order rules, all shared with `optimizer.py`. |
@@ -283,6 +284,22 @@ For an order, `meals` holds a single `Order` group. An infeasible result is stil
 - **`time_limit`:** above 0 and at most 5 seconds (default 1).
 - **Other rules:** gender, activity, goal and restaurant must be one of the listed values; unknown fields are rejected; infeasible plans and restaurant orders can't be saved.
 - **Database errors:** these return 503 with a generic message; the details go to the server log.
+
+## Running the API and web frontend together
+
+The React frontend in `web/` talks to the FastAPI backend in `api/`. Run each in its own terminal, from the repo root, after the database setup above:
+
+```bash
+# Terminal 1: API on http://127.0.0.1:8000 (docs at /docs)
+uvicorn api.main:app --reload
+
+# Terminal 2: frontend on http://localhost:5173 (needs Node.js 20.19+)
+cd web
+npm install
+npm run dev
+```
+
+The frontend reads the API's address from `VITE_API_URL` (default `http://127.0.0.1:8000`; see `web/.env.example`). The API only accepts browser requests from origins in `ALLOWED_ORIGINS` (default `http://localhost:5173`). If you change either port or host, update both. See [web/README.md](web/README.md) for the frontend's scripts and design rules.
 
 ## Running the tests
 
