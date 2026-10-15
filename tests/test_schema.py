@@ -18,7 +18,7 @@ DB_ENV_VARS = ["DATABASE_URL", "DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_P
 
 VALID_ROW = {"name": "Test Oats", "calories": 150, "protein": 5, "carbs": 27, "fat": 3, "fiber": 4,
              "category": "staple", "max_servings": 3, "location": "Grocery",
-             "meal_slots": ["breakfast"], "component_type": None, "source": "manual"}
+             "meal_slots": ["breakfast"], "component_type": None, "source": "manual", "source_url": None}
 
 
 def admin_connection():

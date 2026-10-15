@@ -66,6 +66,8 @@ Their tests remain. The app still uses `solver.load_food_data()` to load foods.
 
 Every CSV has a `Meal_Slots` column listing the meals a food may appear in, separated by `|` (e.g. `breakfast|snack`); valid slots are `breakfast`, `lunch`, `dinner` and `snack`. Adding a food is a data change only. If `Meal_Slots` is blank, or for Trader Joe's items (which have none), a default applies: restaurant items and `lean_protein` foods go to `lunch|dinner`, and everything else to all four slots. `scripts/setup_db.py` loads `food_data.csv` by default and the other two sources on request.
 
+Restaurant rows fetched from an official site also carry a `Source_Url` (loaded into `products.source_url`). Chipotle's come from https://www.chipotle.com/nutrition-calculator; cava.com currently serves a bot challenge, so the CAVA rows are still the earlier manual values with no `Source_Url`. To refresh: `python scripts/fetch_restaurant_menus.py --update-food-data`, then `scripts/setup_db.py`.
+
 Every CSV also has a `Component_Type` column. Each restaurant item needs one of `base`, `protein`, `beans`, `topping` or `sauce`, and `setup_db.py` rejects a missing or unknown value. Grocery items leave it blank.
 
 **Database.** Food data lives in PostgreSQL, in a single `products` table defined in `schema.sql`, with columns for name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots, component_type and source. `source` records where a food's macros came from: `manual` (`food_data.csv` and the seed files), `gemini_estimate` (the Trader Joe's items, whose macros are LLM estimates) or `usda` (verified against USDA FoodData Central). The sidebar's **Exclude estimated foods** checkbox leaves `gemini_estimate` foods out of the pool before optimizing. The app checks the connection at startup and reads this table each time a plan is generated.
@@ -143,6 +145,8 @@ See `requirements.txt` and `requirements-dev.txt` for pinned versions.
 | `trader_joes_macros.json` | Scraper output (Trader Joe's items), loaded with `--with-trader-joes`. |
 | `scripts/setup_db.py` | One-step database setup: applies `schema.sql`, then upserts the food data by name, so it's safe to re-run. |
 | `scripts/check_db.py` | Prints all products in the database, sorted by protein, descending. |
+| `scripts/fetch_restaurant_menus.py` | Reads per-ingredient nutrition from the restaurants' official sites (one page load each, no third-party data, no estimates), writes `data/restaurant_menus_raw.json`, and with `--update-food-data` merges it into `food_data.csv`. |
+| `data/restaurant_menus_raw.json` | The last official fetch: what was read per restaurant (or why it couldn't be), with source URLs and the fetch date. |
 | `scripts/usda_lookup.py` | Compares grocery foods with USDA FoodData Central and saves accepted values to `data/usda_overrides.csv`. |
 | `scripts/audit_data.py` | Prints products whose labelled calories differ from 4P + 4C + 9F by more than 20% (the `nutrition_audit` view). |
 | `scripts/benchmark_solvers.py` | Heuristic vs. MILP benchmark (see [Benchmark](#benchmark)). Reads the data files directly, with no database needed. |

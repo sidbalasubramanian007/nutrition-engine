@@ -15,16 +15,19 @@ CREATE TABLE IF NOT EXISTS products (
     -- Restaurant order component (base, protein, beans, topping, sauce); NULL for grocery items.
     component_type VARCHAR(20),
     -- Where the macros came from: 'manual', 'usda' (verified) or 'gemini_estimate' (LLM estimate)
-    source       VARCHAR(20)  NOT NULL DEFAULT 'manual'
+    source       VARCHAR(20)  NOT NULL DEFAULT 'manual',
+    -- Official page the values were read from (restaurant items fetched by scripts/fetch_restaurant_menus.py)
+    source_url   TEXT
 );
 
 -- Bring older tables up to date: tables from the old migrate/seed scripts lacked meal_slots
 -- and (after import_csv.py recreated the table) the unique name constraint that setup_db.py's
 -- upsert relies on; tables set up before restaurant orders lack component_type, and ones
--- set up before USDA data lack source.
+-- set up before USDA data lack source, and ones set up before official menus lack source_url.
 ALTER TABLE products ADD COLUMN IF NOT EXISTS meal_slots TEXT[];
 ALTER TABLE products ADD COLUMN IF NOT EXISTS component_type VARCHAR(20);
 ALTER TABLE products ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'manual';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS source_url TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS products_name_key ON products (name);
 
 -- Data checks, so bad values can't enter the table. Postgres has no ADD CONSTRAINT IF NOT

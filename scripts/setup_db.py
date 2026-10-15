@@ -52,8 +52,8 @@ MEAL_SLOTS = ["breakfast", "lunch", "dinner", "snack"]
 COMPONENT_TYPES = ["base", "protein", "beans", "topping", "sauce"]
 
 UPSERT_QUERY = """
-INSERT INTO products (name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots, component_type, source)
-VALUES (%(name)s, %(calories)s, %(protein)s, %(carbs)s, %(fat)s, %(fiber)s, %(category)s, %(max_servings)s, %(location)s, %(meal_slots)s, %(component_type)s, %(source)s)
+INSERT INTO products (name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots, component_type, source, source_url)
+VALUES (%(name)s, %(calories)s, %(protein)s, %(carbs)s, %(fat)s, %(fiber)s, %(category)s, %(max_servings)s, %(location)s, %(meal_slots)s, %(component_type)s, %(source)s, %(source_url)s)
 ON CONFLICT (name) DO UPDATE SET
     calories     = EXCLUDED.calories,
     protein      = EXCLUDED.protein,
@@ -65,7 +65,8 @@ ON CONFLICT (name) DO UPDATE SET
     location     = EXCLUDED.location,
     meal_slots   = EXCLUDED.meal_slots,
     component_type = EXCLUDED.component_type,
-    source       = EXCLUDED.source;
+    source       = EXCLUDED.source,
+    source_url   = EXCLUDED.source_url;
 """
 
 
@@ -116,6 +117,7 @@ def read_food_csv(path):
                 "meal_slots": parse_meal_slots(row.get("Meal_Slots"), row["Category"], row["Location"]),
                 "component_type": parse_component_type(row.get("Component_Type"), row["Name"], row["Location"]),
                 "source": "manual",
+                "source_url": (row.get("Source_Url") or "").strip() or None,
             }
             for row in csv.DictReader(f)
         ]
@@ -150,6 +152,7 @@ def read_trader_joes(path):
             "meal_slots": default_meal_slots(category, "Grocery"),
             "component_type": None,
             "source": "gemini_estimate",
+            "source_url": None,
         })
     return products
 

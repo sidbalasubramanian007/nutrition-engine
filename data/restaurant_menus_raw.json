@@ -1,0 +1,411 @@
+{
+  "fetched_at": "2026-10-15T05:32:12+00:00",
+  "restaurants": [
+    {
+      "restaurant": "Chipotle",
+      "source_url": "https://www.chipotle.com/nutrition-calculator",
+      "status": "ok",
+      "data_urls": [
+        "https://services.chipotle.com/menu-metadata/v1/menu-metadata/nutrition?channel=web&region=US",
+        "https://services.chipotle.com/menuinnovation/v1/universalmenus/menurules?country=US"
+      ],
+      "items": [
+        {
+          "name": "Brown Rice",
+          "official_id": "CMG-5002",
+          "component_type": "base",
+          "serving_size": {
+            "unit": "oz",
+            "value": 4
+          },
+          "calories": 210,
+          "protein": 4,
+          "carbs": 36,
+          "fat": 6,
+          "fiber": 2
+        },
+        {
+          "name": "White Rice",
+          "official_id": "CMG-5001",
+          "component_type": "base",
+          "serving_size": {
+            "unit": "oz",
+            "value": 4
+          },
+          "calories": 210,
+          "protein": 4,
+          "carbs": 40,
+          "fat": 4,
+          "fiber": 1
+        },
+        {
+          "name": "Beef Barbacoa",
+          "official_id": "CMG-104",
+          "component_type": "protein",
+          "serving_size": {
+            "unit": "oz",
+            "value": 4
+          },
+          "calories": 170,
+          "protein": 24,
+          "carbs": 2,
+          "fat": 7,
+          "fiber": 1
+        },
+        {
+          "name": "Carnitas",
+          "official_id": "CMG-103",
+          "component_type": "protein",
+          "serving_size": {
+            "unit": "oz",
+            "value": 4
+          },
+          "calories": 210,
+          "protein": 23,
+          "carbs": 0,
+          "fat": 12,
+          "fiber": 0
+        },
+        {
+          "name": "Chicken",
+          "official_id": "CMG-101",
+          "component_type": "protein",
+          "serving_size": {
+            "unit": "oz",
+            "value": 4
+          },
+          "calories": 180,
+          "protein": 32,
+          "carbs": 0,
+          "fat": 7,
+          "fiber": 0
+        },
+        {
+          "name": "Chicken Tinga",
+          "official_id": "CMG-118",
+          "component_type": "protein",
+          "serving_size": {
+            "unit": "oz",
+            "value": 4
+          },
+          "calories": 200,
+          "protein": 23,
+          "carbs": 5,
+          "fat": 10,
+          "fiber": 1
+        },
+        {
+          "name": "Chipotle Honey Chicken",
+          "official_id": "CMG-117",
+          "component_type": "protein",
+          "serving_size": {
+            "unit": "oz",
+            "value": 4
+          },
+          "calories": 210,
+          "protein": 21,
+          "carbs": 13,
+          "fat": 8,
+          "fiber": 1
+        },
+        {
+          "name": "Crispy Chicken",
+          "official_id": "CMG-119",
+          "component_type": "protein",
+          "serving_size": {
+            "unit": "oz",
+            "value": 4
+          },
+          "calories": 220,
+          "protein": 33,
+          "carbs": 7,
+          "fat": 7,
+          "fiber": 3
+        },
+        {
+          "name": "Pollo Asado",
+          "official_id": "CMG-113",
+          "component_type": "protein",
+          "serving_size": {
+            "unit": "oz",
+            "value": 4
+          },
+          "calories": 180,
+          "protein": 29,
+          "carbs": 3,
+          "fat": 7,
+          "fiber": 0
+        },
+        {
+          "name": "Smoked Brisket",
+          "official_id": "CMG-112",
+          "component_type": "protein",
+          "serving_size": {
+            "unit": "oz",
+            "value": 4
+          },
+          "calories": 360,
+          "protein": 22,
+          "carbs": 6,
+          "fat": 27,
+          "fiber": 0
+        },
+        {
+          "name": "Smoked Serrano Steak",
+          "official_id": "CMG-120",
+          "component_type": "protein",
+          "serving_size": {
+            "unit": "oz",
+            "value": 4
+          },
+          "calories": 150,
+          "protein": 19,
+          "carbs": 3,
+          "fat": 7,
+          "fiber": 1
+        },
+        {
+          "name": "Sofritas",
+          "official_id": "CMG-105",
+          "component_type": "protein",
+          "serving_size": {
+            "unit": "oz",
+            "value": 4
+          },
+          "calories": 150,
+          "protein": 8,
+          "carbs": 9,
+          "fat": 10,
+          "fiber": 3
+        },
+        {
+          "name": "Steak",
+          "official_id": "CMG-102",
+          "component_type": "protein",
+          "serving_size": {
+            "unit": "oz",
+            "value": 4
+          },
+          "calories": 150,
+          "protein": 21,
+          "carbs": 1,
+          "fat": 6,
+          "fiber": 1
+        },
+        {
+          "name": "Black Beans",
+          "official_id": "CMG-5051",
+          "component_type": "beans",
+          "serving_size": {
+            "unit": "oz",
+            "value": 4
+          },
+          "calories": 130,
+          "protein": 8,
+          "carbs": 22,
+          "fat": 1.5,
+          "fiber": 7
+        },
+        {
+          "name": "Pinto Beans",
+          "official_id": "CMG-5052",
+          "component_type": "beans",
+          "serving_size": {
+            "unit": "oz",
+            "value": 4
+          },
+          "calories": 130,
+          "protein": 8,
+          "carbs": 21,
+          "fat": 1.5,
+          "fiber": 8
+        },
+        {
+          "name": "Cheese",
+          "official_id": "CMG-5252",
+          "component_type": "topping",
+          "serving_size": {
+            "unit": "oz",
+            "value": 1
+          },
+          "calories": 110,
+          "protein": 6,
+          "carbs": 1,
+          "fat": 8,
+          "fiber": 0
+        },
+        {
+          "name": "Fajita Veggies",
+          "official_id": "CMG-5101",
+          "component_type": "topping",
+          "serving_size": {
+            "unit": "oz",
+            "value": 2.5
+          },
+          "calories": 20,
+          "protein": 1,
+          "carbs": 5,
+          "fat": 0,
+          "fiber": 1
+        },
+        {
+          "name": "Fresh Tomato Salsa",
+          "official_id": "CMG-5201",
+          "component_type": "topping",
+          "serving_size": {
+            "unit": "oz",
+            "value": 3.5
+          },
+          "calories": 25,
+          "protein": 0,
+          "carbs": 4,
+          "fat": 0,
+          "fiber": 1
+        },
+        {
+          "name": "Guacamole",
+          "official_id": "CMG-1001",
+          "component_type": "topping",
+          "serving_size": {
+            "unit": "oz",
+            "value": 4
+          },
+          "calories": 230,
+          "protein": 2,
+          "carbs": 8,
+          "fat": 22,
+          "fiber": 6
+        },
+        {
+          "name": "Queso Blanco",
+          "official_id": "CMG-1029",
+          "component_type": "topping",
+          "serving_size": {
+            "unit": "oz",
+            "value": 2
+          },
+          "calories": 120,
+          "protein": 5,
+          "carbs": 4,
+          "fat": 9,
+          "fiber": 0
+        },
+        {
+          "name": "Roasted Chili-Corn Salsa",
+          "official_id": "CMG-5202",
+          "component_type": "topping",
+          "serving_size": {
+            "unit": "oz",
+            "value": 3.5
+          },
+          "calories": 80,
+          "protein": 3,
+          "carbs": 16,
+          "fat": 1.5,
+          "fiber": 3
+        },
+        {
+          "name": "Romaine Lettuce",
+          "official_id": "CMG-5351",
+          "component_type": "topping",
+          "serving_size": {
+            "unit": "oz",
+            "value": 1
+          },
+          "calories": 5,
+          "protein": 0,
+          "carbs": 1,
+          "fat": 0,
+          "fiber": 1
+        },
+        {
+          "name": "Sour Cream",
+          "official_id": "CMG-5251",
+          "component_type": "topping",
+          "serving_size": {
+            "unit": "oz",
+            "value": 2
+          },
+          "calories": 110,
+          "protein": 2,
+          "carbs": 2,
+          "fat": 9,
+          "fiber": 0
+        },
+        {
+          "name": "Tomatillo-Green Chili Salsa",
+          "official_id": "CMG-5203",
+          "component_type": "topping",
+          "serving_size": {
+            "unit": "oz",
+            "value": 2
+          },
+          "calories": 15,
+          "protein": 0,
+          "carbs": 4,
+          "fat": 0,
+          "fiber": 0
+        },
+        {
+          "name": "Tomatillo-Red Chili Salsa",
+          "official_id": "CMG-5204",
+          "component_type": "topping",
+          "serving_size": {
+            "unit": "oz",
+            "value": 2
+          },
+          "calories": 30,
+          "protein": 0,
+          "carbs": 4,
+          "fat": 0,
+          "fiber": 1
+        },
+        {
+          "name": "Chipotle-Honey Vinaigrette",
+          "official_id": "CMG-5354",
+          "component_type": "sauce",
+          "serving_size": {
+            "unit": "oz",
+            "value": 2
+          },
+          "calories": 220,
+          "protein": 1,
+          "carbs": 18,
+          "fat": 16,
+          "fiber": 1
+        },
+        {
+          "name": "Cilantro Lime Sauce",
+          "official_id": "CMG-5412",
+          "component_type": "sauce",
+          "serving_size": {
+            "unit": "oz",
+            "value": 2
+          },
+          "calories": 80,
+          "protein": 2,
+          "carbs": 3,
+          "fat": 6,
+          "fiber": 1
+        }
+      ],
+      "notes": [
+        "Brown Rice: kept CMG-5002 ({'unit': 'oz', 'value': 4}), the most used id; also listed as CMG-5391 ({'unit': 'oz', 'value': 24})",
+        "White Rice: kept CMG-5001 ({'unit': 'oz', 'value': 4}), the most used id; also listed as CMG-5375 ({'unit': 'oz', 'value': 24})",
+        "Black Beans: kept CMG-5051 ({'unit': 'oz', 'value': 4}), the most used id; also listed as CMG-5376 ({'unit': 'oz', 'value': 24})",
+        "Pinto Beans: kept CMG-5052 ({'unit': 'oz', 'value': 4}), the most used id; also listed as CMG-5392 ({'unit': 'oz', 'value': 24})",
+        "Guacamole: kept CMG-1001 ({'unit': 'oz', 'value': 4}), the most used id; also listed as CMG-5301 ({'unit': 'oz', 'value': 4})",
+        "Queso (CMG-1010): no complete nutrition published, skipped",
+        "Chipotle-Honey Vinaigrette: kept CMG-5354 ({'unit': 'oz', 'value': 2}), the most used id; also listed as CMG-5353 ({'unit': 'oz', 'value': 2})"
+      ],
+      "fetched_at": "2026-10-15T05:32:12+00:00"
+    },
+    {
+      "restaurant": "CAVA",
+      "source_url": "https://cava.com/",
+      "status": "blocked",
+      "saw": "HTTP 403, title 'Just a moment...': cava.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a4ac7140c9c95930 Performance and Security by Cloudflare Privacy",
+      "fetched_at": "2026-10-15T05:32:12+00:00"
+    }
+  ]
+}
