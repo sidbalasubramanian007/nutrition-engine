@@ -112,6 +112,7 @@ It prints one progress line per target and then the summary. Results are written
 
 - **Python 3.12** (the version CI tests against)
 - **Streamlit**: UI (`app.py`)
+- **FastAPI** + **uvicorn**: HTTP API (`api/`), with Pydantic models for every request and response
 - **PuLP 3.3.2**: MILP modeling (`optimizer.py`); its bundled CBC solver is the fallback
 - **HiGHS** (`highspy`): the default MILP solver
 - **PostgreSQL** + **psycopg2**: food data storage (local Postgres via Docker Compose)
@@ -127,6 +128,7 @@ See `requirements.txt` and `requirements-dev.txt` for pinned versions.
 | File | Purpose |
 |---|---|
 | `app.py` | Streamlit UI. Has the TDEE calculator sidebar and macro target sliders. The "Home Cooking Plan" tab runs `optimizer.optimize_meal_plan` (1s limit) and shows the meal plan, macro breakdown and solver status. The "Eating Out Plan" tab has the restaurant order calculator and the "Hack My Menu" auto-builder, which runs `optimizer.optimize_restaurant_order` (1s limit). |
+| `api/` | FastAPI backend (`api/main.py` endpoints, `api/models.py` Pydantic models) that imports `optimizer.py`, `solver.py`, `calculator.py` and `db.py` rather than duplicating them. See [API](#api). |
 | `optimizer.py` | The MILP optimizers. `optimize_meal_plan` covers the daily plan: eligible food/meal placements, meal-structure and fiber constraints, heuristic warm start. `optimize_restaurant_order` covers a single restaurant order with component-type rules. Both share one-hot serving variables, the linearized weighted-deviation objective and HiGHS/CBC selection. |
 | `solver.py` | The heuristic meal-plan and restaurant-order searches, kept as baselines. Also provides `load_food_data()` (used by the app), the `plan_penalty()` and `order_penalty()` formulas, and the restaurant order rules, all shared with `optimizer.py`. |
 | `calculator.py` | TDEE (Mifflin-St Jeor) and macro-target math: BMR → TDEE by activity level → goal adjustment, protein estimate by bodyweight/goal, and fat/carb split from remaining calories. |
@@ -246,6 +248,41 @@ python scripts/check_db.py
 ```bash
 streamlit run app.py
 ```
+
+## API
+
+A FastAPI backend in `api/` exposes the same logic over HTTP, for a separate frontend. Run it from the repo root, with the database set up as above:
+
+```bash
+uvicorn api.main:app --reload
+```
+
+It serves on http://127.0.0.1:8000, with interactive docs at http://127.0.0.1:8000/docs. Cross-origin requests are allowed only from the origins in `ALLOWED_ORIGINS`, a comma-separated list; the default is `http://localhost:5173`, the Vite dev server. It can be set in `.env`.
+
+| Endpoint | Does |
+|---|---|
+| `GET /api/health` | `{"status": "ok", "db": true}`, or `"db": false` if the database is unreachable (still 200) |
+| `GET /api/foods?location=Grocery\|Chipotle\|CAVA&exclude_estimated=true` | Foods with macros per serving, category, meal_slots and source |
+| `POST /api/targets/calculate` | `{age, weight_lbs, height_ft, height_in, gender, activity, goal}` → `{calories, protein, carbs, fat}` |
+| `POST /api/plans/optimize` | `{targets, exclude_estimated, time_limit}` → daily plan |
+| `POST /api/restaurant/optimize` | `{restaurant, targets}` → one order, in the same shape |
+| `POST /api/plans/save` | `{plan, targets}` → `{id}` (a plan as returned by `/api/plans/optimize`) |
+| `GET /api/plans?limit=20` | Saved plans, newest first, with targets, achieved macros and penalty |
+| `GET /api/plans/{id}` | One saved plan in full (404 if it doesn't exist) |
+
+**Plans and orders** share one shape:
+- `status`: `optimal`, `feasible` or `infeasible`;
+- `meals`: a list of `{name, items}`, where each item has `name`, `servings`, `category`, and `macros` for those servings;
+- `macros` (the totals), `penalty`, `solve_time` and `solver`.
+
+For an order, `meals` holds a single `Order` group. An infeasible result is still a 200, with `status: "infeasible"`, empty `meals` and a `message`.
+
+**Validation.** Invalid input returns 422 with details instead of an error page. The limits:
+- **Daily targets:** 1,000–6,000 kcal, protein 0–500 g, carbs 0–1,000 g, fat 0–400 g.
+- **Restaurant (one meal) targets:** 100–3,000 kcal.
+- **`time_limit`:** above 0 and at most 5 seconds (default 1).
+- **Other rules:** gender, activity, goal and restaurant must be one of the listed values; unknown fields are rejected; infeasible plans and restaurant orders can't be saved.
+- **Database errors:** these return 503 with a generic message; the details go to the server log.
 
 ## Running the tests
 
