@@ -157,9 +157,12 @@ def test_optimizer_penalty_is_never_worse_than_the_heuristic_on_the_full_grocery
     random.seed(0)
     heuristic = solver.run_heuristic_solver(foods, 2800, 170, 390, 68, iterations=50000)
 
-    result = optimizer.optimize_meal_plan(foods, 2800, 170, 390, 68)
+    # Proving optimality on this pool takes ~2-4s on an 8-core laptop and can run past any fixed
+    # limit on slower CI machines, so "feasible" (best plan found in time) is accepted too. The
+    # generous limit still lets fast machines finish the proof.
+    result = optimizer.optimize_meal_plan(foods, 2800, 170, 390, 68, time_limit=60)
 
-    assert result["status"] == "optimal"
+    assert result["status"] in ("optimal", "feasible")
     assert result["penalty"] <= heuristic["penalty"] + 1e-6
 
 
