@@ -49,3 +49,25 @@ ALTER TABLE products
     ADD CONSTRAINT products_meal_slots_valid
         CHECK (cardinality(meal_slots) > 0
                AND meal_slots <@ ARRAY['breakfast', 'lunch', 'dinner', 'snack']::TEXT[]) NOT VALID;
+
+-- Sanity check of labelled calories against the macros, using the general Atwater factors
+-- (4 kcal/g protein, 4 kcal/g carbs, 9 kcal/g fat). kcal_difference is labelled minus Atwater;
+-- percent_error is relative to the labelled calories. flagged marks errors above 20% (or any
+-- macro calories on a 0-calorie label). scripts/audit_data.py prints the flagged rows.
+CREATE OR REPLACE VIEW nutrition_audit AS
+SELECT
+    name,
+    location,
+    category,
+    calories,
+    protein,
+    carbs,
+    fat,
+    4 * protein + 4 * carbs + 9 * fat AS atwater_kcal,
+    calories - (4 * protein + 4 * carbs + 9 * fat) AS kcal_difference,
+    ROUND(100 * ABS(calories - (4 * protein + 4 * carbs + 9 * fat)) / NULLIF(calories, 0), 1) AS percent_error,
+    CASE
+        WHEN calories = 0 THEN 4 * protein + 4 * carbs + 9 * fat > 0
+        ELSE ABS(calories - (4 * protein + 4 * carbs + 9 * fat)) > 0.20 * calories
+    END AS flagged
+FROM products;

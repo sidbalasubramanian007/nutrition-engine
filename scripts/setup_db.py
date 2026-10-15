@@ -142,8 +142,8 @@ def read_trader_joes(path):
     return products
 
 
-def collect_products(with_seeds, with_trader_joes):
-    """Merges all requested sources by name, lowest priority first."""
+def read_sources(with_seeds, with_trader_joes):
+    """[(label, product dicts)] for each requested source, lowest priority first."""
     sources = []
     if with_trader_joes:
         if os.path.exists(TRADER_JOES_PATH):
@@ -154,9 +154,13 @@ def collect_products(with_seeds, with_trader_joes):
         for path in sorted(glob.glob(SEED_GLOB)):
             sources.append((os.path.relpath(path, ROOT), read_food_csv(path)))
     sources.append(("food_data.csv", read_food_csv(FOOD_DATA_PATH)))
+    return sources
 
+
+def collect_products(with_seeds, with_trader_joes):
+    """Merges all requested sources by name, lowest priority first."""
     products = {}
-    for label, rows in sources:
+    for label, rows in read_sources(with_seeds, with_trader_joes):
         print(f"Loaded {len(rows)} rows from {label}")
         for row in rows:
             products[row["name"]] = row

@@ -136,3 +136,33 @@ def test_setup_rolls_back_when_a_leftover_row_breaks_a_constraint(temp_db, conn)
     with conn.cursor() as cur:
         cur.execute("SELECT name FROM products ORDER BY name")
         assert [r[0] for r in cur.fetchall()] == ["Legacy Rice"]
+
+
+# --- nutrition_audit view ---
+
+def audit_row(conn, name):
+    with conn.cursor() as cur:
+        cur.execute("SELECT atwater_kcal, kcal_difference, percent_error, flagged FROM nutrition_audit WHERE name = %s",
+                    (name,))
+        atwater, difference, error, flagged = cur.fetchone()
+    return {"atwater_kcal": atwater, "kcal_difference": difference, "percent_error": error, "flagged": flagged}
+
+
+def test_audit_does_not_flag_a_row_whose_macros_match_its_calories(conn):
+    # 4*5 + 4*27 + 9*3 = 155
+    insert(conn, name="Matching Oats", calories=155, protein=5, carbs=27, fat=3)
+    row = audit_row(conn, "Matching Oats")
+    assert row == {"atwater_kcal": 155, "kcal_difference": 0, "percent_error": 0, "flagged": False}
+
+
+def test_audit_flags_a_row_25_percent_off(conn):
+    # Macros give 4*25 = 100 kcal against a label of 80: off by 20/80 = 25%
+    insert(conn, name="Underlabelled Protein", calories=80, protein=25, carbs=0, fat=0)
+    row = audit_row(conn, "Underlabelled Protein")
+    assert row == {"atwater_kcal": 100, "kcal_difference": -20, "percent_error": 25, "flagged": True}
+
+
+def test_audit_flags_a_zero_calorie_row_with_nonzero_macros(conn):
+    insert(conn, name="Free Lunch", calories=0, protein=0, carbs=10, fat=0)
+    row = audit_row(conn, "Free Lunch")
+    assert row == {"atwater_kcal": 40, "kcal_difference": -40, "percent_error": None, "flagged": True}
