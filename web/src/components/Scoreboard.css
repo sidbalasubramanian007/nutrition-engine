@@ -1,0 +1,137 @@
+.scoreboard {
+  background: var(--surface);
+  border-radius: var(--radius-panel);
+  padding: var(--space-5);
+  display: grid;
+  gap: var(--space-4);
+}
+
+.score-rows {
+  margin: 0;
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* Previous numbers stay visible but dimmed while planning (no transition) */
+.scoreboard--loading .score-rows {
+  opacity: 0.45;
+}
+
+.score-row {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.score-row dd {
+  margin: 0;
+}
+
+.score-label {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.score-value {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.score-number {
+  font-size: 44px;
+  color: var(--macro);
+}
+
+.score-unit {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* 6px bar: full width = 130% of target; the 2px tick marks 100% */
+.score-bar {
+  position: relative;
+  height: 6px;
+  margin-top: var(--space-1);
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+
+.score-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+  background: var(--macro);
+  /* The one animation: bars grow to the new plan's values */
+  transition: width 400ms ease-out;
+}
+
+.score-tick {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text);
+}
+
+.score-deviation {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.score-status {
+  font-size: 14px;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--surface-2);
+}
+
+/* Narrow screens: a compact strip of four columns */
+@media (max-width: 999px) {
+  .scoreboard {
+    padding: var(--space-3);
+    gap: 0;
+  }
+
+  .scoreboard-heading,
+  .score-status {
+    display: none;
+  }
+
+  .score-rows {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-2);
+  }
+
+  .score-label,
+  .score-unit,
+  .score-deviation {
+    font-size: 12px;
+  }
+
+  /* Number and unit always share a line; the number shrinks on narrow phones to fit four across */
+  .score-number {
+    font-size: clamp(18px, 5.6vw, 26px);
+  }
+
+  .score-value {
+    flex-wrap: nowrap;
+    gap: 2px;
+    white-space: nowrap;
+  }
+
+  .score-deviation {
+    line-height: 1.3;
+  }
+}
+
+/* Smallest phones (under 360px): one more step down so "3,600 kcal" still fits its column */
+@media (max-width: 359px) {
+  .score-number {
+    font-size: 16px;
+  }
+
+  .score-unit {
+    font-size: 11px;
+  }
+}
