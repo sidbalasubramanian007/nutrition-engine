@@ -12,25 +12,25 @@ LUNCH_DINNER = ["lunch", "dinner"]
 
 def test_rows_to_foods_transforms_rows_matching_the_products_query_shape():
     # Column order matches fetch_products_rows()'s SELECT:
-    # name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots, component_type
+    # name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots, component_type, source
     rows = [
-        ("Chicken Breast", 110, 23, 0, 2, 0.0, "lean_protein", 6, "Grocery", ["lunch", "dinner"], None),
-        ("Chipotle White Rice", 210, 4, 40, 4, 1.0, "staple", 2, "Chipotle", ["lunch", "dinner"], "base"),
+        ("Chicken Breast", 110, 23, 0, 2, 0.0, "lean_protein", 6, "Grocery", ["lunch", "dinner"], None, "usda"),
+        ("Chipotle White Rice", 210, 4, 40, 4, 1.0, "staple", 2, "Chipotle", ["lunch", "dinner"], "base", "manual"),
     ]
     assert solver.rows_to_foods(rows) == [
         {"name": "Chicken Breast", "calories": 110, "protein": 23, "carbs": 0, "fat": 2,
          "fiber": 0.0, "category": "lean_protein", "max_servings": 6, "location": "Grocery",
-         "meal_slots": ["lunch", "dinner"], "component_type": None},
+         "meal_slots": ["lunch", "dinner"], "component_type": None, "source": "usda"},
         {"name": "Chipotle White Rice", "calories": 210, "protein": 4, "carbs": 40, "fat": 4,
          "fiber": 1.0, "category": "staple", "max_servings": 2, "location": "Chipotle",
-         "meal_slots": ["lunch", "dinner"], "component_type": "base"},
+         "meal_slots": ["lunch", "dinner"], "component_type": "base", "source": "manual"},
     ]
 
 
 def test_rows_to_foods_coerces_fiber_to_float():
     # fiber is stored as Postgres FLOAT but psycopg2 can hand back int-like values
     # (e.g. whole-number fiber); rows_to_foods explicitly coerces it to float.
-    rows = [("Egg Whites", 50, 11, 0, 0, 0, "lean_protein", 8, "Grocery", ["breakfast"], None)]
+    rows = [("Egg Whites", 50, 11, 0, 0, 0, "lean_protein", 8, "Grocery", ["breakfast"], None, "manual")]
     foods = solver.rows_to_foods(rows)
     assert foods[0]["fiber"] == 0.0
     assert isinstance(foods[0]["fiber"], float)
@@ -264,7 +264,7 @@ def test_run_heuristic_solver_returns_none_when_no_valid_plan_exists():
 # --- meal slots from the real data files ---
 
 def load_all_real_foods():
-    """Every food setup_db.py can load (food_data.csv + data/*.csv + Trader Joe's), in solver shape."""
+    """Every food setup_db.py can load (food_data.csv + data/seed_*.csv + Trader Joe's), in solver shape."""
     import setup_db
     return setup_db.collect_products(with_seeds=True, with_trader_joes=True)
 

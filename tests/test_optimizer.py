@@ -147,7 +147,7 @@ def test_optimizer_penalty_is_never_worse_than_the_heuristic():
 
 
 def all_grocery_foods():
-    """The 39-food grocery pool: food_data.csv + data/*.csv + Trader Joe's, read from files."""
+    """The 39-food grocery pool: food_data.csv + data/seed_*.csv + Trader Joe's, read from files."""
     foods = setup_db.collect_products(with_seeds=True, with_trader_joes=True)
     return [f for f in foods if f["location"] == "Grocery"]
 

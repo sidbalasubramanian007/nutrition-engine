@@ -55,3 +55,47 @@ def test_every_restaurant_item_in_the_data_has_a_component_type():
     assert restaurant_foods
     assert all(f["component_type"] in setup_db.COMPONENT_TYPES for f in restaurant_foods)
     assert all(f["component_type"] is None for f in foods if f["location"] == "Grocery")
+
+
+# --- sources and USDA overrides (temp data files, no database) ---
+
+OVERRIDES_HEADER = "Name,Calories,Protein,Carbs,Fat,Fiber,Fdc_Id,Serving_Grams\n"
+
+
+def loaded(with_seeds=True, with_trader_joes=True):
+    return {p["name"]: p for p in setup_db.collect_products(with_seeds, with_trader_joes)}
+
+
+def test_rows_are_tagged_with_their_source(small_sources):
+    products = loaded()
+    assert products["Oats"]["source"] == "manual"            # food_data.csv
+    assert products["Tofu"]["source"] == "manual"            # seed file beats Trader Joe's
+    assert products["Lemon Muffins"]["source"] == "gemini_estimate"
+
+
+def test_usda_overrides_replace_macros_only_and_set_source(small_sources, capsys):
+    (small_sources / "data" / "usda_overrides.csv").write_text(
+        OVERRIDES_HEADER + "Lemon Muffins,420,6,58,19,1.5,1987654,113\nNot Loaded,100,1,1,1,0,1,100\n")
+    before = loaded()["Lemon Muffins"]
+
+    after = loaded()["Lemon Muffins"]
+
+    assert {m: after[m] for m in ("calories", "protein", "carbs", "fat", "fiber")} == \
+        {"calories": 420, "protein": 6, "carbs": 58, "fat": 19, "fiber": 1.5}
+    assert after["source"] == "usda"
+    for kept in ("category", "max_servings", "location", "meal_slots", "component_type"):
+        assert after[kept] == before[kept], kept
+    assert "Applied 1 USDA overrides" in capsys.readouterr().out
+
+
+def test_overrides_for_foods_not_loaded_this_run_are_skipped(small_sources):
+    (small_sources / "data" / "usda_overrides.csv").write_text(OVERRIDES_HEADER + "Lemon Muffins,420,6,58,19,1.5,1,113\n")
+    products = loaded(with_trader_joes=False)
+    assert "Lemon Muffins" not in products
+    assert {p["source"] for p in products.values()} == {"manual"}
+
+
+def test_overrides_file_is_not_read_as_a_seed_file(small_sources):
+    (small_sources / "data" / "usda_overrides.csv").write_text(OVERRIDES_HEADER + "Oats,140,5,24,2.5,4,1,40\n")
+    labels = [label for label, _ in setup_db.read_sources(with_seeds=True, with_trader_joes=False)]
+    assert labels == ["data/seed_proteins.csv", "food_data.csv"]

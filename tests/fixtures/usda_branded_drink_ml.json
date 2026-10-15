@@ -1,0 +1,17 @@
+{
+  "fdcId": 1876543,
+  "dataType": "Branded",
+  "description": "PROTEIN SHAKE",
+  "brandOwner": "Example Foods",
+  "servingSize": 325,
+  "servingSizeUnit": "ml",
+  "labelNutrients": {
+    "calories": {"value": 160},
+    "fat": {"value": 3},
+    "carbohydrates": {"value": 6},
+    "protein": {"value": 30}
+  },
+  "foodNutrients": [
+    {"nutrient": {"id": 1079, "number": "291", "name": "Fiber, total dietary", "unitName": "g"}, "amount": 0.5}
+  ]
+}

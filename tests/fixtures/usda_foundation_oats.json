@@ -1,0 +1,18 @@
+{
+  "fdcId": 2346396,
+  "dataType": "Foundation",
+  "description": "Oats, whole grain, rolled, old fashioned",
+  "foodNutrients": [
+    {"nutrient": {"id": 2047, "number": "957", "name": "Energy (Atwater General Factors)", "unitName": "kcal"}, "amount": 383},
+    {"nutrient": {"id": 2048, "number": "958", "name": "Energy (Atwater Specific Factors)", "unitName": "kcal"}, "amount": 379},
+    {"nutrient": {"id": 1062, "number": "268", "name": "Energy", "unitName": "kJ"}, "amount": 1600},
+    {"nutrient": {"id": 1003, "number": "203", "name": "Protein", "unitName": "g"}, "amount": 13.2},
+    {"nutrient": {"id": 1004, "number": "204", "name": "Total lipid (fat)", "unitName": "g"}, "amount": 6.5},
+    {"nutrient": {"id": 1005, "number": "205", "name": "Carbohydrate, by difference", "unitName": "g"}, "amount": 67.9},
+    {"nutrient": {"id": 2033, "number": "293", "name": "Total dietary fiber (AOAC 2011.25)", "unitName": "g"}, "amount": 10.1},
+    {"nutrient": {"id": 2038, "number": "293.3", "name": "High Molecular Weight Dietary Fiber (HMWDF)", "unitName": "g"}, "amount": 9.4}
+  ],
+  "foodPortions": [
+    {"amount": 0.5, "gramWeight": 40, "measureUnit": {"name": "cup"}}
+  ]
+}

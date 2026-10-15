@@ -1,0 +1,16 @@
+{
+  "fdcId": 171477,
+  "dataType": "SR Legacy",
+  "description": "Chicken, broilers or fryers, breast, meat only, cooked, roasted",
+  "foodNutrients": [
+    {"nutrient": {"id": 1008, "number": "208", "name": "Energy", "unitName": "kcal"}, "amount": 165},
+    {"nutrient": {"id": 1062, "number": "268", "name": "Energy", "unitName": "kJ"}, "amount": 690},
+    {"nutrient": {"id": 1003, "number": "203", "name": "Protein", "unitName": "g"}, "amount": 31.02},
+    {"nutrient": {"id": 1004, "number": "204", "name": "Total lipid (fat)", "unitName": "g"}, "amount": 3.57},
+    {"nutrient": {"id": 1005, "number": "205", "name": "Carbohydrate, by difference", "unitName": "g"}, "amount": 0},
+    {"nutrient": {"id": 1079, "number": "291", "name": "Fiber, total dietary", "unitName": "g"}, "amount": 0}
+  ],
+  "foodPortions": [
+    {"amount": 1, "gramWeight": 140, "modifier": "cup, chopped or diced", "measureUnit": {"name": "undetermined"}}
+  ]
+}

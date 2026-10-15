@@ -13,14 +13,18 @@ CREATE TABLE IF NOT EXISTS products (
     -- Meal slots the food belongs in (e.g. {breakfast,snack}); NULL until populated.
     meal_slots   TEXT[],
     -- Restaurant order component (base, protein, beans, topping, sauce); NULL for grocery items.
-    component_type VARCHAR(20)
+    component_type VARCHAR(20),
+    -- Where the macros came from: 'manual', 'usda' (verified) or 'gemini_estimate' (LLM estimate)
+    source       VARCHAR(20)  NOT NULL DEFAULT 'manual'
 );
 
 -- Bring older tables up to date: tables from the old migrate/seed scripts lacked meal_slots
 -- and (after import_csv.py recreated the table) the unique name constraint that setup_db.py's
--- upsert relies on; tables set up before restaurant orders lack component_type.
+-- upsert relies on; tables set up before restaurant orders lack component_type, and ones
+-- set up before USDA data lack source.
 ALTER TABLE products ADD COLUMN IF NOT EXISTS meal_slots TEXT[];
 ALTER TABLE products ADD COLUMN IF NOT EXISTS component_type VARCHAR(20);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'manual';
 CREATE UNIQUE INDEX IF NOT EXISTS products_name_key ON products (name);
 
 -- Data checks, so bad values can't enter the table. Postgres has no ADD CONSTRAINT IF NOT
@@ -45,6 +49,9 @@ ALTER TABLE products
     DROP CONSTRAINT IF EXISTS products_category_known,
     ADD CONSTRAINT products_category_known
         CHECK (category IN ('lean_protein', 'staple', 'carb', 'fat', 'bakery', 'misc')) NOT VALID,
+    DROP CONSTRAINT IF EXISTS products_source_known,
+    ADD CONSTRAINT products_source_known
+        CHECK (source IN ('manual', 'usda', 'gemini_estimate')) NOT VALID,
     DROP CONSTRAINT IF EXISTS products_meal_slots_valid,
     ADD CONSTRAINT products_meal_slots_valid
         CHECK (cardinality(meal_slots) > 0

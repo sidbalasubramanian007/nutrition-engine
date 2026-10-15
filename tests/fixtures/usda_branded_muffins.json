@@ -1,0 +1,20 @@
+{
+  "fdcId": 1987654,
+  "dataType": "Branded",
+  "description": "LEMON POPPY SEED MUFFINS",
+  "brandOwner": "Trader Joe's",
+  "servingSize": 113,
+  "servingSizeUnit": "g",
+  "householdServingFullText": "1 muffin",
+  "labelNutrients": {
+    "calories": {"value": 450},
+    "fat": {"value": 21},
+    "carbohydrates": {"value": 60},
+    "protein": {"value": 6},
+    "sugars": {"value": 32}
+  },
+  "foodNutrients": [
+    {"nutrient": {"id": 1008, "number": "208", "name": "Energy", "unitName": "kcal"}, "amount": 398},
+    {"nutrient": {"id": 1079, "number": "291", "name": "Fiber, total dietary", "unitName": "g"}, "amount": 1.8}
+  ]
+}

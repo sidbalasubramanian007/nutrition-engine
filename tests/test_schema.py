@@ -18,7 +18,7 @@ DB_ENV_VARS = ["DATABASE_URL", "DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_P
 
 VALID_ROW = {"name": "Test Oats", "calories": 150, "protein": 5, "carbs": 27, "fat": 3, "fiber": 4,
              "category": "staple", "max_servings": 3, "location": "Grocery",
-             "meal_slots": ["breakfast"], "component_type": None}
+             "meal_slots": ["breakfast"], "component_type": None, "source": "manual"}
 
 
 def admin_connection():
@@ -98,6 +98,7 @@ def test_schema_applies_twice_and_accepts_a_valid_row(conn):
     ({"category": "dessert"}, "products_category_known"),
     ({"meal_slots": []}, "products_meal_slots_valid"),
     ({"meal_slots": ["breakfast", "brunch"]}, "products_meal_slots_valid"),
+    ({"source": "wikipedia"}, "products_source_known"),
 ])
 def test_invalid_insert_is_rejected(conn, overrides, constraint):
     with pytest.raises(errors.CheckViolation) as excinfo:
@@ -166,3 +167,15 @@ def test_audit_flags_a_zero_calorie_row_with_nonzero_macros(conn):
     insert(conn, name="Free Lunch", calories=0, protein=0, carbs=10, fat=0)
     row = audit_row(conn, "Free Lunch")
     assert row == {"atwater_kcal": 40, "kcal_difference": -40, "percent_error": None, "flagged": True}
+
+
+def test_setup_stores_source_and_applies_usda_overrides(temp_db, conn, small_sources):
+    (small_sources / "data" / "usda_overrides.csv").write_text(
+        "Name,Calories,Protein,Carbs,Fat,Fiber,Fdc_Id,Serving_Grams\nLemon Muffins,420,6,58,19,1.5,1987654,113\n")
+    setup_db.setup(with_seeds=True, with_trader_joes=True)
+    with conn.cursor() as cur:
+        cur.execute("SELECT name, source, calories, category FROM products ORDER BY name")
+        rows = [(n, s, float(c), cat) for n, s, c, cat in cur.fetchall()]
+    assert rows == [("Lemon Muffins", "usda", 420.0, "bakery"),
+                    ("Oats", "manual", 150.0, "staple"),
+                    ("Tofu", "manual", 130.0, "lean_protein")]

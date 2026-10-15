@@ -57,6 +57,17 @@ target_prot  = st.sidebar.slider("Target Protein (g)",   50,  250, st.session_st
 target_carbs = st.sidebar.slider("Target Carbs (g)",     50,  600, st.session_state.target_carbs)
 target_fat   = st.sidebar.slider("Target Fat (g)",       20,  150, st.session_state.target_fat)
 
+exclude_estimated = st.sidebar.checkbox(
+    "Exclude estimated foods",
+    help="Leave out foods whose macros are LLM estimates (source 'gemini_estimate', e.g. scraped Trader Joe's items).",
+)
+
+def usable_foods(foods):
+    """The food pool after the sidebar's source filter."""
+    if foods and exclude_estimated:
+        return [f for f in foods if f.get('source') != "gemini_estimate"]
+    return foods
+
 
 # Solver time budget for home plans and restaurant orders; the best result found so far is
 # returned if not yet proven optimal
@@ -82,7 +93,7 @@ with tab_grocery:
     
     if st.button("Generate Home Meal Plan"):
         with st.spinner("Optimizing grocery meal plan..."):
-            foods = solver.load_food_data(mode="grocery")
+            foods = usable_foods(solver.load_food_data(mode="grocery"))
             
             if foods:
                 winner = optimizer.optimize_meal_plan(
@@ -132,7 +143,7 @@ with tab_restaurant:
     restaurant = st.selectbox("Select Restaurant", ["Chipotle", "CAVA"], key="rest_select")
     
     # Load the foods for the selected restaurant
-    foods = solver.load_food_data(mode="eating_out", restaurant=restaurant)
+    foods = usable_foods(solver.load_food_data(mode="eating_out", restaurant=restaurant))
     rest_foods = [f for f in foods if f.get('location') == restaurant] if foods else []
     
     if not rest_foods:

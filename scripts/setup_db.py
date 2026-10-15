@@ -2,7 +2,7 @@
 
 Usage (from the repo root):
     python scripts/setup_db.py                     # food_data.csv only
-    python scripts/setup_db.py --with-seeds        # + curated staples in data/*.csv
+    python scripts/setup_db.py --with-seeds        # + curated staples in data/seed_*.csv
     python scripts/setup_db.py --with-trader-joes  # + trader_joes_macros.json (scraper output)
 
 Rows are upserted by name. When the same name appears in more than one source,
@@ -14,6 +14,11 @@ default rule in default_meal_slots().
 
 Restaurant items need a Component_Type (base, protein, beans, topping or sauce),
 which optimizer.optimize_restaurant_order builds orders from; grocery items leave it blank.
+
+Each row records where its macros came from in `source`: 'manual' (food_data.csv and the
+seed files), 'gemini_estimate' (trader_joes_macros.json) or 'usda'. USDA-verified values in
+data/usda_overrides.csv (written by scripts/usda_lookup.py) are applied last, on every run:
+they replace a loaded food's calories/protein/carbs/fat/fiber and keep everything else.
 """
 import argparse
 import csv
@@ -31,8 +36,12 @@ import db
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 FOOD_DATA_PATH = os.path.join(ROOT, "food_data.csv")
-SEED_GLOB = os.path.join(ROOT, "data", "*.csv")
+SEED_GLOB = os.path.join(ROOT, "data", "seed_*.csv")
 TRADER_JOES_PATH = os.path.join(ROOT, "trader_joes_macros.json")
+USDA_OVERRIDES_PATH = os.path.join(ROOT, "data", "usda_overrides.csv")
+
+SOURCES = ["manual", "usda", "gemini_estimate"]
+OVERRIDE_MACROS = ["calories", "protein", "carbs", "fat", "fiber"]
 
 # Keyword tagging for scraped items, which carry no category of their own.
 # Protein keywords are checked last so they win over bakery keywords.
@@ -43,8 +52,8 @@ MEAL_SLOTS = ["breakfast", "lunch", "dinner", "snack"]
 COMPONENT_TYPES = ["base", "protein", "beans", "topping", "sauce"]
 
 UPSERT_QUERY = """
-INSERT INTO products (name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots, component_type)
-VALUES (%(name)s, %(calories)s, %(protein)s, %(carbs)s, %(fat)s, %(fiber)s, %(category)s, %(max_servings)s, %(location)s, %(meal_slots)s, %(component_type)s)
+INSERT INTO products (name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots, component_type, source)
+VALUES (%(name)s, %(calories)s, %(protein)s, %(carbs)s, %(fat)s, %(fiber)s, %(category)s, %(max_servings)s, %(location)s, %(meal_slots)s, %(component_type)s, %(source)s)
 ON CONFLICT (name) DO UPDATE SET
     calories     = EXCLUDED.calories,
     protein      = EXCLUDED.protein,
@@ -55,7 +64,8 @@ ON CONFLICT (name) DO UPDATE SET
     max_servings = EXCLUDED.max_servings,
     location     = EXCLUDED.location,
     meal_slots   = EXCLUDED.meal_slots,
-    component_type = EXCLUDED.component_type;
+    component_type = EXCLUDED.component_type,
+    source       = EXCLUDED.source;
 """
 
 
@@ -105,6 +115,7 @@ def read_food_csv(path):
                 "location": row["Location"],
                 "meal_slots": parse_meal_slots(row.get("Meal_Slots"), row["Category"], row["Location"]),
                 "component_type": parse_component_type(row.get("Component_Type"), row["Name"], row["Location"]),
+                "source": "manual",
             }
             for row in csv.DictReader(f)
         ]
@@ -138,6 +149,7 @@ def read_trader_joes(path):
             "location": "Grocery",
             "meal_slots": default_meal_slots(category, "Grocery"),
             "component_type": None,
+            "source": "gemini_estimate",
         })
     return products
 
@@ -157,13 +169,39 @@ def read_sources(with_seeds, with_trader_joes):
     return sources
 
 
+def read_usda_overrides(path=None):
+    """{name: {macro: value, ...}} from data/usda_overrides.csv, or {} if the file doesn't exist yet."""
+    path = path or USDA_OVERRIDES_PATH
+    if not os.path.exists(path):
+        return {}
+    with open(path, newline="") as f:
+        return {row["Name"]: {macro: float(row[macro.capitalize()]) for macro in OVERRIDE_MACROS}
+                for row in csv.DictReader(f)}
+
+
+def apply_usda_overrides(products, overrides):
+    """Replaces macros of loaded products with USDA values (source='usda'). Returns names not loaded."""
+    not_loaded = []
+    for name, macros in overrides.items():
+        if name in products:
+            products[name] = dict(products[name], **macros, source="usda")
+        else:
+            not_loaded.append(name)
+    return not_loaded
+
+
 def collect_products(with_seeds, with_trader_joes):
-    """Merges all requested sources by name, lowest priority first."""
+    """Merges all requested sources by name, lowest priority first, then applies USDA overrides."""
     products = {}
     for label, rows in read_sources(with_seeds, with_trader_joes):
         print(f"Loaded {len(rows)} rows from {label}")
         for row in rows:
             products[row["name"]] = row
+    overrides = read_usda_overrides()
+    if overrides:
+        not_loaded = apply_usda_overrides(products, overrides)
+        print(f"Applied {len(overrides) - len(not_loaded)} USDA overrides from {os.path.relpath(USDA_OVERRIDES_PATH, ROOT)}"
+              + (f" ({len(not_loaded)} for foods not loaded this run, skipped)" if not_loaded else ""))
     return list(products.values())
 
 
@@ -205,7 +243,7 @@ def setup(with_seeds=False, with_trader_joes=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--with-seeds", action="store_true", help="also load the curated staples in data/*.csv")
+    parser.add_argument("--with-seeds", action="store_true", help="also load the curated staples in data/seed_*.csv")
     parser.add_argument("--with-trader-joes", action="store_true", help="also load trader_joes_macros.json if present")
     args = parser.parse_args()
     setup(with_seeds=args.with_seeds, with_trader_joes=args.with_trader_joes)
