@@ -22,3 +22,30 @@ CREATE TABLE IF NOT EXISTS products (
 ALTER TABLE products ADD COLUMN IF NOT EXISTS meal_slots TEXT[];
 ALTER TABLE products ADD COLUMN IF NOT EXISTS component_type VARCHAR(20);
 CREATE UNIQUE INDEX IF NOT EXISTS products_name_key ON products (name);
+
+-- Data checks, so bad values can't enter the table. Postgres has no ADD CONSTRAINT IF NOT
+-- EXISTS, so each is dropped and re-added: idempotent, and an edited definition takes effect
+-- on the next setup_db.py run. NOT VALID enforces them on every insert and update straight
+-- away but skips checking existing rows, so a re-run can first upsert corrected data; then
+-- setup_db.py validates every constraint against all rows in the same transaction.
+-- (NULL meal_slots still pass; setup_db.py backfills them in the same transaction.)
+ALTER TABLE products
+    DROP CONSTRAINT IF EXISTS products_calories_nonnegative,
+    ADD CONSTRAINT products_calories_nonnegative CHECK (calories >= 0) NOT VALID,
+    DROP CONSTRAINT IF EXISTS products_protein_nonnegative,
+    ADD CONSTRAINT products_protein_nonnegative CHECK (protein >= 0) NOT VALID,
+    DROP CONSTRAINT IF EXISTS products_carbs_nonnegative,
+    ADD CONSTRAINT products_carbs_nonnegative CHECK (carbs >= 0) NOT VALID,
+    DROP CONSTRAINT IF EXISTS products_fat_nonnegative,
+    ADD CONSTRAINT products_fat_nonnegative CHECK (fat >= 0) NOT VALID,
+    DROP CONSTRAINT IF EXISTS products_fiber_nonnegative,
+    ADD CONSTRAINT products_fiber_nonnegative CHECK (fiber >= 0) NOT VALID,
+    DROP CONSTRAINT IF EXISTS products_max_servings_range,
+    ADD CONSTRAINT products_max_servings_range CHECK (max_servings BETWEEN 1 AND 5) NOT VALID,
+    DROP CONSTRAINT IF EXISTS products_category_known,
+    ADD CONSTRAINT products_category_known
+        CHECK (category IN ('lean_protein', 'staple', 'carb', 'fat', 'bakery', 'misc')) NOT VALID,
+    DROP CONSTRAINT IF EXISTS products_meal_slots_valid,
+    ADD CONSTRAINT products_meal_slots_valid
+        CHECK (cardinality(meal_slots) > 0
+               AND meal_slots <@ ARRAY['breakfast', 'lunch', 'dinner', 'snack']::TEXT[]) NOT VALID;

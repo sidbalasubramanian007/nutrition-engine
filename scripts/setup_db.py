@@ -22,6 +22,8 @@ import json
 import os
 import sys
 
+from psycopg2 import sql
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
@@ -171,6 +173,13 @@ def backfill_meal_slots(cur):
         )
 
 
+def validate_constraints(cur):
+    """Checks every row against schema.sql's CHECK constraints, which are added NOT VALID."""
+    cur.execute("SELECT conname FROM pg_constraint WHERE conrelid = 'products'::regclass AND NOT convalidated;")
+    for (name,) in cur.fetchall():
+        cur.execute(sql.SQL("ALTER TABLE products VALIDATE CONSTRAINT {};").format(sql.Identifier(name)))
+
+
 def setup(with_seeds=False, with_trader_joes=False):
     products = collect_products(with_seeds, with_trader_joes)
 
@@ -181,6 +190,7 @@ def setup(with_seeds=False, with_trader_joes=False):
                 cur.execute(f.read())
             cur.executemany(UPSERT_QUERY, products)
             backfill_meal_slots(cur)
+            validate_constraints(cur)
             cur.execute("SELECT count(*) FROM products;")
             total = cur.fetchone()[0]
     finally:
