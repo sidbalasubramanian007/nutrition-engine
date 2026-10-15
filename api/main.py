@@ -58,7 +58,7 @@ def to_plan(result, foods, infeasible_message):
     """optimizer result -> Plan, with items grouped by meal and per-item macros."""
     if result["status"] == "infeasible":
         return Plan(status="infeasible", meals=[], solve_time=result["solve_time"], solver=result["solver"],
-                    message=infeasible_message)
+                    message=result.get("reason") or infeasible_message)
     by_name = {f["name"]: f for f in foods}
     return Plan(
         status=result["status"],
@@ -118,7 +118,9 @@ def calculate_targets(body: TargetsRequest):
 def optimize_plan(body: PlanRequest, foods: list = Depends(load_foods)):
     pool = [f for f in without_estimates(foods, body.exclude_estimated) if f["location"] == "Grocery"]
     t = body.targets
-    result = optimizer.optimize_meal_plan(pool, t.calories, t.protein, t.carbs, t.fat, time_limit=body.time_limit)
+    result = optimizer.optimize_meal_plan(pool, t.calories, t.protein, t.carbs, t.fat, time_limit=body.time_limit,
+                                          locked=[lock.model_dump() for lock in body.locked],
+                                          excluded=body.excluded)
     return to_plan(result, pool, INFEASIBLE_PLAN)
 
 

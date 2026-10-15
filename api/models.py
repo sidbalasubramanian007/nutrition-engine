@@ -101,13 +101,22 @@ class Plan(BaseModel):
     penalty: Optional[float] = None
     solve_time: float
     solver: str
-    message: Optional[str] = Field(None, description="Why no plan was found, when status is infeasible")
+    message: Optional[str] = Field(None, description="Why no plan was found (e.g. which lock conflicts), when infeasible")
+
+
+class LockedItem(Request):
+    """A food that must appear in a meal at exactly this many servings."""
+    name: str = Field(min_length=1)
+    meal: Literal["Breakfast", "Lunch", "Dinner", "Snack"]
+    servings: int = Field(ge=1, le=3, description="Snacks allow 1; main meals up to min(max_servings, 3)")
 
 
 class PlanRequest(Request):
     targets: DailyTargets
     exclude_estimated: bool = False
     time_limit: float = Field(1, gt=0, le=5)
+    locked: list[LockedItem] = Field(default_factory=list, max_length=8)
+    excluded: list[str] = Field(default_factory=list, max_length=200, description="Food names that must not appear")
 
 
 class RestaurantRequest(Request):

@@ -128,7 +128,7 @@ def test_infeasible_plan_is_200_with_status_and_message(client):
     plan = response.json()
     assert plan["status"] == "infeasible"
     assert plan["meals"] == [] and plan["macros"] is None and plan["penalty"] is None
-    assert "meal structure" in plan["message"]
+    assert plan["message"] == "No lean protein is available for Breakfast with the current foods"
 
 
 @pytest.mark.parametrize("restaurant", ["Chipotle", "CAVA"])
@@ -237,3 +237,37 @@ def test_saving_a_plan_with_unknown_foods_is_422_and_saves_nothing(client, plan_
     assert response.status_code == 422
     assert "Not A Product" in response.json()["detail"]
     assert client.get("/api/plans").json() == []
+
+
+
+# --- locks and exclusions ---
+
+def test_optimize_honours_locks_and_exclusions(client):
+    body = {"targets": DEFAULT_TARGETS,
+            "locked": [{"name": "Chicken Breast", "meal": "Dinner", "servings": 2}],
+            "excluded": ["Jasmine Rice", "Whey Protein Powder"]}
+    plan = client.post("/api/plans/optimize", json=body).json()
+
+    assert plan["status"] in ("optimal", "feasible")
+    dinner = next(m for m in plan["meals"] if m["name"] == "Dinner")
+    assert {"name": "Chicken Breast", "servings": 2} in [{"name": i["name"], "servings": i["servings"]} for i in dinner["items"]]
+    assert not {i["name"] for m in plan["meals"] for i in m["items"]} & {"Jasmine Rice", "Whey Protein Powder"}
+
+
+def test_conflicting_lock_is_200_infeasible_with_the_reason(client):
+    body = {"targets": DEFAULT_TARGETS, "locked": [{"name": "Chicken Breast", "meal": "Breakfast", "servings": 1}]}
+    response = client.post("/api/plans/optimize", json=body)
+    assert response.status_code == 200
+    assert response.json()["status"] == "infeasible"
+    assert response.json()["message"] == "'Chicken Breast' can't go in Breakfast: its meal slots are lunch, dinner"
+
+
+@pytest.mark.parametrize("lock", [
+    {"name": "Chicken Breast", "meal": "Brunch", "servings": 1},
+    {"name": "Chicken Breast", "meal": "Dinner", "servings": 0},
+    {"name": "Chicken Breast", "meal": "Dinner", "servings": 4},
+    {"name": "", "meal": "Dinner", "servings": 1},
+    {"name": "Chicken Breast", "meal": "Dinner"},
+])
+def test_malformed_lock_is_422(client, lock):
+    assert client.post("/api/plans/optimize", json={"targets": DEFAULT_TARGETS, "locked": [lock]}).status_code == 422

@@ -50,13 +50,73 @@ def eligible_pairs(foods, restaurant, restaurant_meal):
     return pairs
 
 
-def has_required_pools(foods, pairs):
-    """Cheap pre-check: every main meal needs a staple and a protein, and the snack needs something."""
+CATEGORY_LABELS = {"staple": "staple", "lean_protein": "lean protein"}
+
+
+def missing_pool(foods, pairs):
+    """Cheap pre-check: why the pools can't fill the meal structure, or None if they might."""
     for meal in MAIN_MEALS:
         categories = {foods[i]["category"] for i, m in pairs if m == meal}
-        if not {"staple", "lean_protein"} <= categories:
-            return False
-    return any(m == "Snack" for _, m in pairs)
+        for category, label in CATEGORY_LABELS.items():
+            if category not in categories:
+                return f"No {label} is available for {meal} with the current foods"
+    if not any(m == "Snack" for _, m in pairs):
+        return "No food is available for the snack with the current foods"
+    return None
+
+
+def lock_conflict(foods, locked, excluded, restaurant, restaurant_meal):
+    """
+    Checks locks ({name, meal, servings}) against the pool and the meal structure before any model
+    is built. foods must already exclude the excluded names. Returns why they conflict, or None.
+    """
+    by_name = {f["name"]: f for f in foods}
+    meal_names = [meal for meal, _ in MEALS]
+    placed = {}
+    for lock in locked:
+        name, meal, servings = lock["name"], lock["meal"], lock["servings"]
+        if name in excluded:
+            return f"'{name}' is both locked and excluded"
+        food = by_name.get(name)
+        if food is None:
+            return f"Locked food '{name}' isn't in the food pool"
+        if meal not in meal_names:
+            return f"'{name}' is locked into '{meal}', which isn't a meal (use {', '.join(meal_names)})"
+        if name in placed:
+            return f"'{name}' is locked into both {placed[name]} and {meal}; each food is used at most once per day"
+        if meal.lower() not in food["meal_slots"]:
+            return f"'{name}' can't go in {meal}: its meal slots are {', '.join(food['meal_slots'])}"
+        location = meal_location(meal, restaurant, restaurant_meal)
+        if food.get("location", "Grocery") != location:
+            return f"'{name}' is a {food.get('location', 'Grocery')} item, but {meal} uses {location} foods"
+        if meal != "Snack" and food["category"] not in CATEGORY_LABELS:
+            return (f"'{name}' is a {food['category']} food, but {meal} takes exactly one staple "
+                    f"and one lean protein")
+        cap = serving_cap(food, meal)
+        if not 1 <= servings <= cap:
+            return f"'{name}' is locked at {servings} servings in {meal}; it allows 1 to {cap}"
+        placed[name] = meal
+
+    for meal in meal_names:
+        names = [lock["name"] for lock in locked if lock["meal"] == meal]
+        if meal == "Snack":
+            if len(names) > 2:
+                return f"{len(names)} foods are locked into Snack ({', '.join(names)}); the snack has at most 2"
+            continue
+        for category, label in CATEGORY_LABELS.items():
+            same = [n for n in names if by_name[n]["category"] == category]
+            if len(same) > 1:
+                return f"{len(same)} {label}s are locked into {meal} ({', '.join(same)}); each main meal takes exactly one"
+
+    fiber = sum(by_name[lock["name"]]["fiber"] * lock["servings"] for lock in locked)
+    if fiber > MAX_FIBER:
+        return f"The locked foods alone have {fiber:g}g of fiber; the daily cap is {MAX_FIBER}g"
+    return None
+
+
+def plan_has_locks(plan, locked):
+    placed = {(item["name"], item["meal"], item["servings"]) for item in plan["items"]}
+    return all((lock["name"], lock["meal"], lock["servings"]) in placed for lock in locked)
 
 
 def build_result(foods, servings, target_calories, target_protein, target_carbs, target_fat):
@@ -91,9 +151,9 @@ def build_result(foods, servings, target_calories, target_protein, target_carbs,
     return {"items": result_items, "macros": totals, "penalty": penalty}
 
 
-def infeasible_result(solve_time, solver_name):
+def infeasible_result(solve_time, solver_name, reason=None):
     return {"items": [], "macros": None, "penalty": None, "status": "infeasible",
-            "solve_time": solve_time, "solver": solver_name}
+            "solve_time": solve_time, "solver": solver_name, "reason": reason}
 
 
 def default_solver():
@@ -209,9 +269,14 @@ def chosen_servings(keys, servings):
 
 def optimize_meal_plan(foods, target_calories, target_protein, target_carbs, target_fat,
                        restaurant=None, restaurant_meal=None, time_limit=10, gap_rel=0.005,
-                       solver_name=None, warm_start_iterations=2000):
+                       solver_name=None, warm_start_iterations=2000, locked=None, excluded=None):
     """
     Finds the meal plan with the lowest solver.py penalty as an integer program (HiGHS or CBC via PuLP).
+
+    locked is a list of {"name", "meal", "servings"} that must appear exactly as given; their
+    serving variables are fixed before solving. excluded is a list of food names that must not
+    appear anywhere. Locks are checked against meal slots, locations, categories, serving caps
+    and the meal structure first; a conflict returns status "infeasible" with a "reason".
 
     Uses the same plan structure as solver.build_meal_plan, but fiber <= 35g is a hard
     constraint instead of a penalty. solver_name is "highs" or "cbc"; by default HiGHS is
@@ -221,13 +286,19 @@ def optimize_meal_plan(foods, target_calories, target_protein, target_carbs, tar
     Returns solver.run_heuristic_solver's dict shape plus "status" ("optimal" if proven
     within gap_rel of the best possible penalty, "feasible" if the time limit hit first,
     or "infeasible" if no valid plan exists or none was found in time), "solve_time" in
-    seconds and "solver". Infeasible results have no items and None for macros and penalty.
+    seconds and "solver". Infeasible results have no items, None for macros and penalty, and a
+    "reason" explaining why.
     """
     start = time.perf_counter()
     solver_name = solver_name or default_solver()
+    locked, excluded = list(locked or []), set(excluded or [])
+    foods = [f for f in foods if f["name"] not in excluded]
+
+    reason = lock_conflict(foods, locked, excluded, restaurant, restaurant_meal)
     pairs = eligible_pairs(foods, restaurant, restaurant_meal)
-    if not has_required_pools(foods, pairs):
-        return infeasible_result(time.perf_counter() - start, solver_name)
+    reason = reason or missing_pool(foods, pairs)
+    if reason:
+        return infeasible_result(time.perf_counter() - start, solver_name, reason)
 
     targets = {"calories": target_calories, "protein": target_protein, "carbs": target_carbs, "fat": target_fat}
     prob = pulp.LpProblem("meal_plan", pulp.LpMinimize)
@@ -263,16 +334,31 @@ def optimize_meal_plan(foods, target_calories, target_protein, target_carbs, tar
     deviation = add_deviation_objective(prob, {m: total(m) for m in MACROS}, targets,
                                         {m: total_range(foods, pairs, m) for m in MACROS})
 
+    # Fix each locked placement: exactly that serving count of that food in that meal
+    index = {f["name"]: i for i, f in enumerate(foods)}
+    for lock in locked:
+        var = z[index[lock["name"]], lock["meal"]][lock["servings"]]
+        var.lowBound = var.upBound = 1
+
     # Warm start only helps HiGHS (2.9s -> 2.4s); it made CBC slightly slower, so CBC skips it.
+    # A heuristic plan that breaks a lock would be rejected as a start, so only matching ones are used.
     warm = False
     if solver_name == "highs" and warm_start_iterations:
         plan = heuristic_start(foods, targets, restaurant, restaurant_meal, warm_start_iterations)
-        warm = plan is not None and set_initial_values(foods, pairs, plan, z, deviation, targets)
+        warm = (plan is not None and plan_has_locks(plan, locked)
+                and set_initial_values(foods, pairs, plan, z, deviation, targets))
 
     status = solve(prob, solver_name, time_limit, gap_rel, warm)
     solve_time = time.perf_counter() - start
     if status == "infeasible":
-        return infeasible_result(solve_time, solver_name)
+        if locked:
+            reason = ("No plan can complete the meal structure around the locked foods with the remaining "
+                      "foods (for example, a lock may use up the only option another meal needs)")
+        elif excluded:
+            reason = "No plan fits the meal structure (fiber at most 35g) with the foods left after the exclusions"
+        else:
+            reason = "No plan fits the meal structure (fiber at most 35g) with the current foods"
+        return infeasible_result(solve_time, solver_name, reason)
 
     servings = chosen_servings(pairs, s)
     result = build_result(foods, servings, target_calories, target_protein, target_carbs, target_fat)

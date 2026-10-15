@@ -297,3 +297,117 @@ def test_restaurant_order_without_a_base_is_infeasible():
     assert order["status"] == "infeasible"
     assert order["items"] == []
     assert order["penalty"] is None
+
+
+
+# --- locked and excluded foods ---
+
+def lock(name, meal, servings):
+    return {"name": name, "meal": meal, "servings": servings}
+
+
+def placements(plan):
+    return [(i["name"], i["meal"], i["servings"]) for i in plan["items"]]
+
+
+@pytest.mark.parametrize("locked_item", [
+    lock("Chicken Breast", "Dinner", 2),
+    lock("Sweet Potato", "Lunch", 3),
+    lock("Egg Whites", "Breakfast", 1),
+    lock("Almonds", "Snack", 1),
+])
+def test_locked_item_appears_with_exactly_its_servings_in_its_meal(locked_item):
+    result = optimizer.optimize_meal_plan(csv_foods(), 2800, 170, 390, 68, locked=[locked_item])
+
+    assert result["status"] == "optimal"
+    assert (locked_item["name"], locked_item["meal"], locked_item["servings"]) in placements(result)
+    assert [p[0] for p in placements(result)].count(locked_item["name"]) == 1
+
+
+def test_several_locks_hold_together():
+    locks = [lock("Rolled Oats", "Breakfast", 2), lock("Chicken Breast", "Lunch", 1), lock("Almonds", "Snack", 1)]
+    result = optimizer.optimize_meal_plan(csv_foods(), 2800, 170, 390, 68, locked=locks)
+    assert result["status"] == "optimal"
+    assert {(l["name"], l["meal"], l["servings"]) for l in locks} <= set(placements(result))
+
+
+def test_excluded_food_never_appears_across_targets():
+    foods = csv_foods()
+    # All three appear in these targets' unrestricted plans (the yogurt in every one)
+    excluded = ["Whole Milk Greek Yogurt", "Olive Oil", "Bananas"]
+    for target in [(2800, 170, 390, 68), (1800, 140, 180, 60), (3500, 220, 420, 110), (2200, 120, 300, 70)]:
+        baseline = optimizer.optimize_meal_plan(foods, *target)
+        result = optimizer.optimize_meal_plan(foods, *target, excluded=excluded)
+        assert result["status"] == "optimal", target
+        assert not {p[0] for p in placements(result)} & set(excluded), target
+        # Excluding foods can only make the best plan worse or equal, never better
+        assert result["penalty"] >= baseline["penalty"] - 1e-6, target
+
+
+@pytest.mark.parametrize("locks, excluded, reason", [
+    ([lock("Chicken Breast", "Breakfast", 1)], [],
+     "'Chicken Breast' can't go in Breakfast: its meal slots are lunch, dinner"),
+    ([lock("Egg Whites", "Breakfast", 1), lock("Whey Protein Powder", "Breakfast", 1)], [],
+     "2 lean proteins are locked into Breakfast (Egg Whites, Whey Protein Powder); each main meal takes exactly one"),
+    ([lock("Jasmine Rice", "Lunch", 1), lock("Sweet Potato", "Lunch", 1)], [],
+     "2 staples are locked into Lunch (Jasmine Rice, Sweet Potato); each main meal takes exactly one"),
+    ([lock("Peanut Butter", "Lunch", 1)], [],
+     "'Peanut Butter' is a fat food, but Lunch takes exactly one staple and one lean protein"),
+    ([lock("Chicken Breast", "Lunch", 1), lock("Chicken Breast", "Dinner", 1)], [],
+     "'Chicken Breast' is locked into both Lunch and Dinner; each food is used at most once per day"),
+    ([lock("Almonds", "Snack", 2)], [], "'Almonds' is locked at 2 servings in Snack; it allows 1 to 1"),
+    ([lock("Rolled Oats", "Breakfast", 1)], ["Rolled Oats"], "'Rolled Oats' is both locked and excluded"),
+    ([lock("Tofu Scramble", "Lunch", 1)], [], "Locked food 'Tofu Scramble' isn't in the food pool"),
+    ([lock("Chipotle Chicken", "Lunch", 1)], [], "'Chipotle Chicken' is a Chipotle item, but Lunch uses Grocery foods"),
+    ([lock("Almonds", "Snack", 1), lock("Bananas", "Snack", 1), lock("Peanut Butter", "Snack", 1)], [],
+     "3 foods are locked into Snack (Almonds, Bananas, Peanut Butter); the snack has at most 2"),
+    ([lock("Rolled Oats", "Breakfast", 1)], ["Egg Whites", "Whey Protein Powder", "Whole Milk Greek Yogurt"],
+     "No lean protein is available for Breakfast with the current foods"),
+])
+def test_invalid_locks_return_infeasible_with_a_reason(locks, excluded, reason):
+    foods = setup_db.read_food_csv(setup_db.FOOD_DATA_PATH)  # all locations, so restaurant locks can be tested
+    result = optimizer.optimize_meal_plan(foods, 2800, 170, 390, 68, locked=locks, excluded=excluded)
+    assert result["status"] == "infeasible"
+    assert result["items"] == [] and result["penalty"] is None
+    assert result["reason"] == reason
+
+
+def test_locks_that_leave_no_completion_are_infeasible_from_the_solver():
+    # Each lock is valid on its own, but taking both lunch/dinner proteins at lunch-time slots
+    # leaves dinner without one: only the solver can see that.
+    locks = [lock("Chicken Breast", "Lunch", 1)]
+    foods = [f for f in csv_foods() if f["name"] != "Lean Ground Turkey"]
+    result = optimizer.optimize_meal_plan(foods, 2800, 170, 390, 68, locked=locks)
+    assert result["status"] == "infeasible"
+    assert result["reason"].startswith("No plan can complete the meal structure around the locked foods")
+
+
+def test_too_much_locked_fiber_is_infeasible_with_a_reason():
+    foods = [dict(f, fiber=20) if f["name"] in ("Rolled Oats", "Sweet Potato") else f for f in csv_foods()]
+    result = optimizer.optimize_meal_plan(foods, 2800, 170, 390, 68,
+                                          locked=[lock("Rolled Oats", "Breakfast", 1), lock("Sweet Potato", "Lunch", 1)])
+    assert result["reason"] == "The locked foods alone have 40g of fiber; the daily cap is 35g"
+
+
+@pytest.mark.parametrize("target", [(2800, 170, 390, 68), (2000, 150, 220, 60), (3200, 200, 380, 95)])
+def test_locking_every_item_of_an_optimal_plan_reproduces_it(target):
+    foods = csv_foods()
+    original = optimizer.optimize_meal_plan(foods, *target)
+    assert original["status"] == "optimal"
+
+    locks = [lock(i["name"], i["meal"], i["servings"]) for i in original["items"]]
+    reproduced = optimizer.optimize_meal_plan(foods, *target, locked=locks)
+
+    assert reproduced["status"] == "optimal"
+    assert reproduced["items"] == original["items"]
+    assert reproduced["macros"] == original["macros"]
+    assert reproduced["penalty"] == original["penalty"]
+
+
+
+def test_exclusions_that_leave_no_valid_plan_say_so():
+    # Chicken Breast and Lean Ground Turkey are the CSV pool's only lunch/dinner proteins;
+    # without chicken, turkey can't cover both meals
+    result = optimizer.optimize_meal_plan(csv_foods(), 2800, 170, 390, 68, excluded=["Chicken Breast"])
+    assert result["status"] == "infeasible"
+    assert result["reason"] == "No plan fits the meal structure (fiber at most 35g) with the foods left after the exclusions"

@@ -264,7 +264,7 @@ It serves on http://127.0.0.1:8000, with interactive docs at http://127.0.0.1:80
 | `GET /api/health` | `{"status": "ok", "db": true}`, or `"db": false` if the database is unreachable (still 200) |
 | `GET /api/foods?location=Grocery\|Chipotle\|CAVA&exclude_estimated=true` | Foods with macros per serving, category, meal_slots and source |
 | `POST /api/targets/calculate` | `{age, weight_lbs, height_ft, height_in, gender, activity, goal}` → `{calories, protein, carbs, fat}` |
-| `POST /api/plans/optimize` | `{targets, exclude_estimated, time_limit}` → daily plan |
+| `POST /api/plans/optimize` | `{targets, exclude_estimated, time_limit, locked, excluded}` → daily plan. `locked` is a list of `{name, meal, servings}` that must appear exactly as given; `excluded` is a list of food names that must not appear. |
 | `POST /api/restaurant/optimize` | `{restaurant, targets}` → one order, in the same shape |
 | `POST /api/plans/save` | `{plan, targets}` → `{id}` (a plan as returned by `/api/plans/optimize`) |
 | `GET /api/plans?limit=20` | Saved plans, newest first, with targets, achieved macros and penalty |
@@ -275,7 +275,7 @@ It serves on http://127.0.0.1:8000, with interactive docs at http://127.0.0.1:80
 - `meals`: a list of `{name, items}`, where each item has `name`, `servings`, `category`, and `macros` for those servings;
 - `macros` (the totals), `penalty`, `solve_time` and `solver`.
 
-For an order, `meals` holds a single `Order` group. An infeasible result is still a 200, with `status: "infeasible"`, empty `meals` and a `message`.
+For an order, `meals` holds a single `Order` group. An infeasible result is still a 200, with `status: "infeasible"`, empty `meals` and a `message` saying why. For example, a lock may name a meal the food isn't allowed in, or put two proteins in the same meal.
 
 **Validation.** Invalid input returns 422 with details instead of an error page. The limits:
 - **Daily targets:** 1,000–6,000 kcal, protein 0–500 g, carbs 0–1,000 g, fat 0–400 g.
