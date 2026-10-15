@@ -78,3 +78,28 @@ SELECT
         ELSE ABS(calories - (4 * protein + 4 * carbs + 9 * fat)) > 0.20 * calories
     END AS flagged
 FROM products;
+
+-- Saved meal plans (see db.save_plan). A plan's achieved macros aren't stored: list_plans and
+-- get_plan compute them from plan_items and the products' current macros.
+CREATE TABLE IF NOT EXISTS plans (
+    id              SERIAL PRIMARY KEY,
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    target_calories NUMERIC      NOT NULL,
+    target_protein  NUMERIC      NOT NULL,
+    target_carbs    NUMERIC      NOT NULL,
+    target_fat      NUMERIC      NOT NULL,
+    penalty         NUMERIC      NOT NULL,
+    -- Infeasible results have no items, so only these can be saved
+    status          VARCHAR(20)  NOT NULL CHECK (status IN ('optimal', 'feasible')),
+    solver          VARCHAR(20)  NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS plan_items (
+    id         SERIAL PRIMARY KEY,  -- insertion order = display order
+    plan_id    INTEGER     NOT NULL REFERENCES plans (id) ON DELETE CASCADE,
+    -- No cascade: a product used by a saved plan can't be deleted out from under it
+    product_id INTEGER     NOT NULL REFERENCES products (id),
+    meal       VARCHAR(20) NOT NULL CHECK (meal IN ('Breakfast', 'Lunch', 'Dinner', 'Snack')),
+    servings   INTEGER     NOT NULL CHECK (servings >= 1)
+);
+CREATE INDEX IF NOT EXISTS plan_items_plan_id_idx ON plan_items (plan_id);

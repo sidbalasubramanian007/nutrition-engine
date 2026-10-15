@@ -1,6 +1,7 @@
 import streamlit as st
 import solver
 import calculator
+import db
 import optimizer
 import db
 from dotenv import load_dotenv
@@ -81,8 +82,33 @@ def show_solver_status(result, time_limit):
     else:
         st.caption(f"Best plan found in {time_limit}s (not yet proven optimal)")
 
+def show_plan(plan, targets):
+    """Meal-by-meal items and a macro breakdown against the targets the plan was made for."""
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Meal Plan")
+        current_meal = None
+        for item in plan['items']:
+            if item['meal'] != current_meal:
+                current_meal = item['meal']
+                st.markdown(f"**🍽️ {current_meal}**")
+            st.write(f"  • **{item['servings']}x** {item['name']} `[{item['category'].upper()}]`")
+
+    with col2:
+        st.subheader("Macro Breakdown")
+        st.metric("Calories", f"{plan['macros']['calories']} kcal",
+                  delta=f"{plan['macros']['calories'] - targets['calories']:+} vs target")
+        st.metric("Protein",  f"{plan['macros']['protein']}g",
+                  delta=f"{plan['macros']['protein'] - targets['protein']:+.0f}g vs target")
+        st.metric("Carbs",    f"{plan['macros']['carbs']}g",
+                  delta=f"{plan['macros']['carbs'] - targets['carbs']:+.0f}g vs target")
+        st.metric("Fat",      f"{plan['macros']['fat']}g",
+                  delta=f"{plan['macros']['fat'] - targets['fat']:+.0f}g vs target")
+        st.metric("Fiber",    f"{plan['macros']['fiber']}g")
+    return col2
+
 # 5. MAIN CONTENT - TWO DISTINCT MODES
-tab_grocery, tab_restaurant = st.tabs(["🍳 Home Cooking Plan", "🥗 Eating Out Plan"])
+tab_grocery, tab_restaurant, tab_saved = st.tabs(["🍳 Home Cooking Plan", "🥗 Eating Out Plan", "📒 Saved Plans"])
 
 # ---------------------------------------------------------
 # TAB 1: HOME COOKING (PURE GROCERY)
@@ -91,48 +117,53 @@ with tab_grocery:
     st.subheader("Home-Cooked Daily Meal Prep")
     st.caption("Generates a structured daily plan built strictly from standard grocery ingredients.")
     
+    # The last generated plan lives in session state so it survives the rerun a "Save plan"
+    # click causes, along with the targets it was made for.
     if st.button("Generate Home Meal Plan"):
         with st.spinner("Optimizing grocery meal plan..."):
             foods = usable_foods(solver.load_food_data(mode="grocery"))
-            
             if foods:
-                winner = optimizer.optimize_meal_plan(
-                    foods, target_cal, target_prot, target_carbs, target_fat,
-                    time_limit=HOME_PLAN_TIME_LIMIT,
-                )
-                
-                if winner['status'] != "infeasible":
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.subheader("Meal Plan")
-                        current_meal = None
-                        for item in winner['items']:
-                            if item['meal'] != current_meal:
-                                current_meal = item['meal']
-                                st.markdown(f"**🍽️ {current_meal}**")
-                            st.write(f"  • **{item['servings']}x** {item['name']} `[{item['category'].upper()}]`")
-
-                    with col2:
-                        st.subheader("Macro Breakdown")
-                        st.metric("Calories", f"{winner['macros']['calories']} kcal",
-                                  delta=f"{winner['macros']['calories'] - target_cal:+} vs target")
-                        st.metric("Protein",  f"{winner['macros']['protein']}g",
-                                  delta=f"{winner['macros']['protein'] - target_prot:+.0f}g vs target")
-                        st.metric("Carbs",    f"{winner['macros']['carbs']}g",
-                                  delta=f"{winner['macros']['carbs'] - target_carbs:+.0f}g vs target")
-                        st.metric("Fat",      f"{winner['macros']['fat']}g",
-                                  delta=f"{winner['macros']['fat'] - target_fat:+.0f}g vs target")
-                        st.metric("Fiber",    f"{winner['macros']['fiber']}g")
-                        show_solver_status(winner, HOME_PLAN_TIME_LIMIT)
-                else:
-                    st.error(
-                        "No meal plan fits the meal structure (a staple and a protein at breakfast, lunch "
-                        "and dinner, plus a snack, with fiber under 35g) using the foods currently loaded. "
-                        "Try loading more foods with `python scripts/setup_db.py --with-seeds`, "
-                        "or widen your targets."
-                    )
+                st.session_state.home_plan = {
+                    "plan": optimizer.optimize_meal_plan(
+                        foods, target_cal, target_prot, target_carbs, target_fat,
+                        time_limit=HOME_PLAN_TIME_LIMIT,
+                    ),
+                    "targets": {"calories": target_cal, "protein": target_prot, "carbs": target_carbs, "fat": target_fat},
+                    "saved_id": None,
+                }
             else:
+                st.session_state.home_plan = None
                 st.error("Database connected successfully, but returned empty data.")
+
+    home = st.session_state.get("home_plan")
+    if home and home["plan"]['status'] != "infeasible":
+        with show_plan(home["plan"], home["targets"]):
+            show_solver_status(home["plan"], HOME_PLAN_TIME_LIMIT)
+
+        # Saving in on_click runs before the rerun, so the button is already disabled when
+        # redrawn and a second click can't save a duplicate.
+        def save_home_plan():
+            if home["saved_id"] is not None:  # already saved; never store a duplicate
+                return
+            try:
+                home["saved_id"] = db.save_plan(home["plan"], home["targets"])
+                home["save_error"] = None
+            except Exception as e:
+                home["save_error"] = str(e)
+
+        st.button("Save plan", key="save_home_plan", on_click=save_home_plan,
+                  disabled=home["saved_id"] is not None)
+        if home["saved_id"] is not None:
+            st.success(f"Saved as plan #{home['saved_id']}. See the 📒 Saved Plans tab.")
+        elif home.get("save_error"):
+            st.error(f"Could not save the plan: {home['save_error']}")
+    elif home:
+        st.error(
+            "No meal plan fits the meal structure (a staple and a protein at breakfast, lunch "
+            "and dinner, plus a snack, with fiber under 35g) using the foods currently loaded. "
+            "Try loading more foods with `python scripts/setup_db.py --with-seeds`, "
+            "or widen your targets."
+        )
 
 # ---------------------------------------------------------
 # TAB 2: EATING OUT (HYBRID)
@@ -224,3 +255,44 @@ with tab_restaurant:
                             f"at most 4 toppings and sauces) with {restaurant}'s menu items. Make sure every "
                             f"{restaurant} item has a Component_Type, then reload with `python scripts/setup_db.py`."
                         )
+
+# ---------------------------------------------------------
+# TAB 3: SAVED PLANS
+# ---------------------------------------------------------
+with tab_saved:
+    st.subheader("Saved Plans")
+    st.caption("Your most recent saved home plans. Achieved macros use each food's current nutrition data.")
+
+    try:
+        saved_plans = db.list_plans(limit=20)
+    except Exception as e:
+        saved_plans = None
+        st.error(f"Could not load saved plans ({e}). Run `python scripts/setup_db.py` to create the plan tables.")
+
+    if saved_plans == []:
+        st.info("No saved plans yet. Generate a home plan and click **Save plan**.")
+    elif saved_plans:
+        def macro_summary(macros):
+            return f"{macros['calories']:.0f} kcal · {macros['protein']:.0f}P · {macros['carbs']:.0f}C · {macros['fat']:.0f}F"
+
+        st.dataframe(
+            [{
+                "Plan": f"#{p['id']}",
+                "Saved": p['created_at'].astimezone().strftime("%Y-%m-%d %H:%M"),
+                "Targets": macro_summary(p['targets']),
+                "Achieved": macro_summary(p['macros']),
+                "Penalty": round(p['penalty'], 1),
+                "Status": p['status'],
+            } for p in saved_plans],
+            hide_index=True,
+        )
+
+        labels = {p['id']: f"#{p['id']} · {p['created_at'].astimezone():%Y-%m-%d %H:%M} · penalty {p['penalty']:.0f}"
+                  for p in saved_plans}
+        selected = st.selectbox("View a plan in full", list(labels), format_func=labels.get, key="saved_plan_select")
+        plan = db.get_plan(selected)
+        if plan is None:
+            st.warning("That plan no longer exists.")
+        else:
+            with show_plan(plan, plan['targets']):
+                st.caption(f"{plan['status'].capitalize()} · solver {plan['solver']} · penalty {plan['penalty']:.1f}")

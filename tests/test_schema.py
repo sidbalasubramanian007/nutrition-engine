@@ -68,7 +68,7 @@ def conn(temp_db):
     yield connection
     connection.rollback()
     with connection.cursor() as cur:
-        cur.execute("TRUNCATE products;")
+        cur.execute("TRUNCATE plan_items, plans, products;")
     connection.commit()
     connection.close()
 
@@ -179,3 +179,126 @@ def test_setup_stores_source_and_applies_usda_overrides(temp_db, conn, small_sou
     assert rows == [("Lemon Muffins", "usda", 420.0, "bakery"),
                     ("Oats", "manual", 150.0, "staple"),
                     ("Tofu", "manual", 130.0, "lean_protein")]
+
+
+
+# --- saved plans ---
+
+PLAN_FOODS = [
+    dict(VALID_ROW, name="Plan Oats", calories=150, protein=5, carbs=27, fat=3, fiber=4),
+    dict(VALID_ROW, name="Plan Chicken", calories=165, protein=31, carbs=0, fat=3.6, fiber=0, category="lean_protein",
+         meal_slots=["lunch", "dinner"]),
+    dict(VALID_ROW, name="Plan Banana", calories=105, protein=1, carbs=27, fat=0, fiber=3, category="carb",
+         meal_slots=["snack"]),
+]
+TARGETS = {"calories": 2000, "protein": 150, "carbs": 220, "fat": 60}
+
+
+def optimizer_plan(**overrides):
+    """A plan in optimizer.optimize_meal_plan's result shape."""
+    plan = {
+        "items": [
+            {"name": "Plan Oats", "servings": 2, "category": "staple", "meal": "Breakfast"},
+            {"name": "Plan Chicken", "servings": 3, "category": "lean_protein", "meal": "Dinner"},
+            {"name": "Plan Banana", "servings": 1, "category": "carb", "meal": "Snack"},
+        ],
+        "macros": {}, "penalty": 1234.5, "status": "optimal", "solve_time": 0.2, "solver": "highs",
+    }
+    plan.update(overrides)
+    return plan
+
+
+@pytest.fixture
+def plan_conn(conn):
+    """conn with three products loaded for plans to reference."""
+    for food in PLAN_FOODS:
+        insert(conn, **food)
+    conn.commit()
+    return conn
+
+
+def count(conn, table, where="TRUE", params=()):
+    with conn.cursor() as cur:
+        cur.execute(f"SELECT count(*) FROM {table} WHERE {where}", params)
+        return cur.fetchone()[0]
+
+
+def test_save_and_get_round_trip(plan_conn):
+    plan_id = db.save_plan(optimizer_plan(), TARGETS)
+    saved = db.get_plan(plan_id)
+
+    assert saved["id"] == plan_id
+    assert saved["created_at"] is not None
+    assert saved["targets"] == {"calories": 2000, "protein": 150, "carbs": 220, "fat": 60}
+    assert (saved["penalty"], saved["status"], saved["solver"]) == (1234.5, "optimal", "highs")
+    assert [(i["name"], i["meal"], i["servings"], i["category"]) for i in saved["items"]] == [
+        ("Plan Oats", "Breakfast", 2, "staple"),
+        ("Plan Chicken", "Dinner", 3, "lean_protein"),
+        ("Plan Banana", "Snack", 1, "carb"),
+    ]
+    assert saved["items"][1] == {"name": "Plan Chicken", "meal": "Dinner", "servings": 3, "category": "lean_protein",
+                                 "calories": 165, "protein": 31, "carbs": 0, "fat": 3.6, "fiber": 0}
+    # 2x oats + 3x chicken + 1x banana
+    assert saved["macros"] == {"calories": 900, "protein": 104, "carbs": 81, "fat": 16.8, "fiber": 11}
+
+    listed = db.list_plans()
+    assert [p["id"] for p in listed] == [plan_id]
+    assert listed[0]["macros"] == saved["macros"]
+    assert listed[0]["item_count"] == 3
+    assert listed[0]["targets"] == saved["targets"]
+
+
+def test_list_plans_is_newest_first_and_limited(plan_conn):
+    ids = [db.save_plan(optimizer_plan(penalty=p), TARGETS) for p in (1, 2, 3)]
+    assert [p["id"] for p in db.list_plans()] == ids[::-1]
+    assert [p["id"] for p in db.list_plans(limit=2)] == ids[:0:-1]
+    assert db.get_plan(max(ids) + 1000) is None
+
+
+def test_failed_item_insert_rolls_back_the_whole_plan(plan_conn):
+    # The plan row and the first two items insert fine; the third violates servings >= 1
+    bad = optimizer_plan()
+    bad["items"][2] = dict(bad["items"][2], servings=0)
+
+    with pytest.raises(errors.CheckViolation):
+        db.save_plan(bad, TARGETS)
+
+    assert count(plan_conn, "plans") == 0
+    assert count(plan_conn, "plan_items") == 0
+
+
+def test_unknown_product_rolls_back_the_whole_plan(plan_conn):
+    bad = optimizer_plan()
+    bad["items"].append({"name": "Not A Product", "servings": 1, "category": "misc", "meal": "Snack"})
+
+    with pytest.raises(LookupError, match="Not A Product"):
+        db.save_plan(bad, TARGETS)
+
+    assert count(plan_conn, "plans") == 0
+    assert count(plan_conn, "plan_items") == 0
+
+
+def test_infeasible_plan_cannot_be_saved(plan_conn):
+    with pytest.raises(ValueError):
+        db.save_plan(optimizer_plan(items=[], status="infeasible", penalty=None), TARGETS)
+    assert count(plan_conn, "plans") == 0
+
+
+def test_deleting_a_plan_cascades_to_its_items(plan_conn):
+    keep = db.save_plan(optimizer_plan(), TARGETS)
+    remove = db.save_plan(optimizer_plan(), TARGETS)
+
+    with plan_conn.cursor() as cur:
+        cur.execute("DELETE FROM plans WHERE id = %s", (remove,))
+    plan_conn.commit()
+
+    assert count(plan_conn, "plan_items", "plan_id = %s", (remove,)) == 0
+    assert count(plan_conn, "plan_items", "plan_id = %s", (keep,)) == 3
+    assert db.get_plan(remove) is None
+
+
+def test_products_used_by_a_saved_plan_cannot_be_deleted(plan_conn):
+    db.save_plan(optimizer_plan(), TARGETS)
+    with pytest.raises(errors.ForeignKeyViolation):
+        with plan_conn.cursor() as cur:
+            cur.execute("DELETE FROM products WHERE name = 'Plan Banana'")
