@@ -302,3 +302,10 @@ def test_products_used_by_a_saved_plan_cannot_be_deleted(plan_conn):
     with pytest.raises(errors.ForeignKeyViolation):
         with plan_conn.cursor() as cur:
             cur.execute("DELETE FROM products WHERE name = 'Plan Banana'")
+
+
+def test_delete_plan_reports_whether_it_deleted(plan_conn):
+    plan_id = db.save_plan(optimizer_plan(), TARGETS)
+    assert db.delete_plan(plan_id) is True
+    assert db.delete_plan(plan_id) is False
+    assert count(plan_conn, "plan_items", "plan_id = %s", (plan_id,)) == 0

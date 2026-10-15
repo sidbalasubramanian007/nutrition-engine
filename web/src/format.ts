@@ -8,6 +8,8 @@ export function formatNumber(value: number): string {
 
 export type MacroKey = "calories" | "protein" | "carbs" | "fat";
 
+export const MACRO_WORDS = { protein: "protein", carbs: "carbs", fat: "fat" } as const;
+
 /** The macro contributing the most calories: protein and carbs at 4 kcal/g, fat at 9. */
 export function dominantMacro(macros: Macros): Exclude<MacroKey, "calories"> {
   const energy = { protein: macros.protein * 4, carbs: macros.carbs * 4, fat: macros.fat * 9 };

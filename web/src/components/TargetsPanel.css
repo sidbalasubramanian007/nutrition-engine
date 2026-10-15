@@ -3,85 +3,9 @@
   gap: var(--space-4);
 }
 
-.segmented {
-  display: flex;
-  gap: var(--space-1);
-  margin: 0;
-  padding: var(--space-1);
-  border: 0;
-  border-radius: var(--radius-control);
-  background: var(--surface-2);
-}
-
-.segmented-option {
-  position: relative;
-  flex: 1 1 auto;
-}
-
-/* The real radio input stays focusable; its label is the visible segment */
-.segmented-option input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  margin: 0;
-  cursor: pointer;
-}
-
-.segmented-option span {
-  display: block;
-  padding: var(--space-1) var(--space-2);
-  border-radius: calc(var(--radius-control) - 2px);
-  text-align: center;
-  white-space: nowrap;
-  font-size: 14px;
-  color: var(--muted);
-}
-
-.segmented-option input:checked + span {
-  background: var(--surface);
-  color: var(--text);
-  font-weight: var(--weight-medium);
-}
-
-.segmented-option input:focus-visible + span {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
 .targets-form {
   display: grid;
   gap: var(--space-3);
-}
-
-.field {
-  display: grid;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.field label,
-.field-group legend {
-  font-size: 14px;
-  color: var(--muted);
-}
-
-.field-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
-}
-
-.field-group {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  display: grid;
-  gap: var(--space-1);
-}
-
-.field-group legend {
-  padding: 0;
-  margin-bottom: var(--space-1);
 }
 
 .calculated {

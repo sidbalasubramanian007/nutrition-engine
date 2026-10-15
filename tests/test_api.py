@@ -71,8 +71,29 @@ def test_foods_filter_by_location_and_source(client):
     assert no_estimates and all(f["source"] != "gemini_estimate" for f in no_estimates)
 
 
-def test_unknown_location_is_rejected(client):
-    assert client.get("/api/foods", params={"location": "Taco Bell"}).status_code == 422
+def test_unknown_location_has_no_foods(client):
+    response = client.get("/api/foods", params={"location": "Taco Bell"})
+    assert response.status_code == 200 and response.json() == []
+
+
+def test_new_restaurants_work_without_code_changes(client):
+    # Restaurants come from the data: add a menu with the same structure and it can be optimized
+    foods = file_foods()
+    taqueria = [dict(f, name=f["name"].replace("Chipotle", "Taqueria"), location="Taqueria")
+                for f in foods if f["location"] == "Chipotle"]
+    main.app.dependency_overrides[main.load_foods] = lambda: foods + taqueria
+    order = client.post("/api/restaurant/optimize", json={
+        "restaurant": "Taqueria", "targets": {"calories": 900, "protein": 60, "carbs": 100, "fat": 30}}).json()
+    assert order["status"] == "optimal"
+    assert all(i["name"].startswith("Taqueria") for i in order["meals"][0]["items"])
+
+
+@pytest.mark.parametrize("restaurant", ["Taco Bell", "Grocery"])
+def test_unknown_restaurant_is_422_with_the_known_ones(client, restaurant):
+    response = client.post("/api/restaurant/optimize", json={
+        "restaurant": restaurant, "targets": {"calories": 900, "protein": 60, "carbs": 100, "fat": 30}})
+    assert response.status_code == 422
+    assert "CAVA, Chipotle" in response.json()["detail"]
 
 
 # --- targets ---
@@ -271,3 +292,21 @@ def test_conflicting_lock_is_200_infeasible_with_the_reason(client):
 ])
 def test_malformed_lock_is_422(client, lock):
     assert client.post("/api/plans/optimize", json={"targets": DEFAULT_TARGETS, "locked": [lock]}).status_code == 422
+
+
+def test_delete_plan_removes_it_and_its_items(client, plan_conn):
+    keep = client.post("/api/plans/save", json={"plan": api_plan(), "targets": TARGETS}).json()["id"]
+    remove = client.post("/api/plans/save", json={"plan": api_plan(), "targets": TARGETS}).json()["id"]
+
+    response = client.delete(f"/api/plans/{remove}")
+    assert response.status_code == 204 and response.content == b""
+
+    assert client.get(f"/api/plans/{remove}").status_code == 404
+    assert [p["id"] for p in client.get("/api/plans").json()] == [keep]
+    with plan_conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM plan_items WHERE plan_id = %s", (remove,))
+        assert cur.fetchone()[0] == 0
+
+
+def test_delete_unknown_plan_is_404(client, plan_conn):
+    assert client.delete("/api/plans/999999").status_code == 404

@@ -1,0 +1,133 @@
+.saved {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 880px;
+}
+
+.saved-empty a {
+  color: var(--text);
+  text-underline-offset: 3px;
+}
+
+.saved-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.saved-item {
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+
+/* The whole summary row is the expand/collapse button */
+.saved-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: transparent;
+  border-radius: var(--radius-panel);
+  text-align: left;
+  font-weight: var(--weight-body);
+}
+
+.saved-row:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.saved-item--open .saved-row {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.saved-date {
+  font-weight: var(--weight-medium);
+}
+
+.saved-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+}
+
+.saved-number {
+  white-space: nowrap;
+}
+
+.saved-number .number {
+  font-size: 22px;
+}
+
+.saved-unit {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.saved-miss {
+  font-size: 14px;
+  text-align: right;
+}
+
+.saved-detail {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4) var(--space-4);
+}
+
+.saved-targets {
+  font-size: 14px;
+}
+
+.saved-actions {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.saved-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.button-danger {
+  background: var(--protein);
+  color: var(--bg);
+}
+
+.button-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--protein) 85%, var(--bg));
+}
+
+@media (max-width: 640px) {
+  .saved-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "date miss"
+      "numbers numbers";
+    gap: var(--space-2) var(--space-3);
+  }
+
+  .saved-date {
+    grid-area: date;
+  }
+
+  .saved-numbers {
+    grid-area: numbers;
+    gap: var(--space-1) var(--space-3);
+  }
+
+  .saved-miss {
+    grid-area: miss;
+  }
+
+  .saved-number .number {
+    font-size: 20px;
+  }
+}

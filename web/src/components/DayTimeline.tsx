@@ -1,11 +1,9 @@
 import type { DailyMeal, Plan } from "../api.ts";
-import { featuredMacro, formatNumber } from "../format.ts";
 import type { SaveState } from "../usePlanner.ts";
 import { LockIcon, RemoveIcon } from "./icons.tsx";
+import Timeline from "./Timeline.tsx";
 import "./DayTimeline.css";
 
-const MEAL_ORDER: DailyMeal[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
-const MACRO_WORDS = { protein: "protein", carbs: "carbs", fat: "fat" } as const;
 
 interface Props {
   plan: Plan | null;
@@ -28,9 +26,6 @@ interface Props {
 
 export default function DayTimeline(props: Props) {
   const { plan } = props;
-  const meals = plan
-    ? MEAL_ORDER.map((name) => plan.meals.find((m) => m.name === name)).filter((m) => m !== undefined)
-    : [];
   const hasConstraints = props.lockedCount > 0 || props.removedCount > 0;
 
   return (
@@ -69,55 +64,43 @@ export default function DayTimeline(props: Props) {
       {!plan && !props.infeasible && <p className="empty">Set your targets and plan your day.</p>}
 
       {plan && (
-        <ol className={`timeline${props.loading ? " timeline--loading" : ""}`}>
-          {meals.map((meal) => (
-            <li key={meal.name} className="meal">
-              <h3 className="meal-name">{meal.name}</h3>
-              <ul className="foods">
-                {meal.items.map((item) => {
-                  const mealName = meal.name as DailyMeal;
-                  const locked = props.isLocked(item.name, mealName, item.servings);
-                  const macro = featuredMacro(item.category, item.macros);
-                  const removed = props.removed.includes(item.name);
-                  return (
-                    <li key={item.name} className={`food${locked ? " food--locked" : ""}${removed ? " food--removed" : ""}`}>
-                      <span className="food-name">
-                        <span className="food-servings">{item.servings} ×</span> {item.name}
-                        {removed && <span className="visually-hidden">, removed</span>}
-                      </span>
-                      {/* The macro this food is in the plan for (see featuredMacro), in grams for these servings */}
-                      <span className={`food-macro food-macro--${macro}`}>
-                        {formatNumber(item.macros[macro])} g {MACRO_WORDS[macro]}
-                      </span>
-                      <span className="food-kcal">{formatNumber(item.macros.calories)} kcal</span>
-                      <span className="food-actions">
-                        <button
-                          type="button"
-                          className="icon-button"
-                          aria-label={`Lock ${item.name} in ${meal.name.toLowerCase()}`}
-                          aria-pressed={locked}
-                          onClick={() => props.onToggleLock(item.name, mealName, item.servings)}
-                        >
-                          <LockIcon filled={locked} />
-                        </button>
-                        {!removed && (
-                          <button
-                            type="button"
-                            className="icon-button"
-                            aria-label={`Remove ${item.name} and re-plan`}
-                            onClick={() => props.onRemove(item.name)}
-                          >
-                            <RemoveIcon />
-                          </button>
-                        )}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </li>
-          ))}
-        </ol>
+        <Timeline
+          meals={plan.meals}
+          loading={props.loading}
+          rowClass={(item, meal) =>
+            [props.isLocked(item.name, meal.name, item.servings) && "food--locked", props.removed.includes(item.name) && "food--removed"]
+              .filter(Boolean)
+              .join(" ")
+          }
+          rowNote={(item) => (props.removed.includes(item.name) ? ", removed" : "")}
+          actions={(item, meal) => {
+            const mealName = meal.name as DailyMeal;
+            const locked = props.isLocked(item.name, mealName, item.servings);
+            return (
+              <>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={`Lock ${item.name} in ${meal.name.toLowerCase()}`}
+                  aria-pressed={locked}
+                  onClick={() => props.onToggleLock(item.name, mealName, item.servings)}
+                >
+                  <LockIcon filled={locked} />
+                </button>
+                {!props.removed.includes(item.name) && (
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`Remove ${item.name} and re-plan`}
+                    onClick={() => props.onRemove(item.name)}
+                  >
+                    <RemoveIcon />
+                  </button>
+                )}
+              </>
+            );
+          }}
+        />
       )}
 
       {plan && (

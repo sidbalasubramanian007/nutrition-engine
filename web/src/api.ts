@@ -7,8 +7,10 @@ export const API_URL = (import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000")
 
 // --- shared literals ---
 
-export type Location = "Grocery" | "Chipotle" | "CAVA";
-export type Restaurant = "Chipotle" | "CAVA";
+/** "Grocery" or a restaurant; restaurants come from the data (see getFoods). */
+export type Location = string;
+/** A restaurant location from getFoods, e.g. "Chipotle". Unknown ones are a 422. */
+export type Restaurant = string;
 export type Status = "optimal" | "feasible" | "infeasible";
 export type DailyMeal = "Breakfast" | "Lunch" | "Dinner" | "Snack";
 export type MealName = DailyMeal | "Order";
@@ -226,6 +228,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(response.status, detail, describe(detail, response.status));
   }
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
@@ -275,4 +278,9 @@ export function listPlans(limit = 20, signal?: AbortSignal): Promise<SavedPlanSu
 /** GET /api/plans/{id}. Rejects with ApiError status 404 if the plan doesn't exist. */
 export function getPlan(id: number, signal?: AbortSignal): Promise<SavedPlan> {
   return request<SavedPlan>(`/api/plans/${encodeURIComponent(id)}`, { signal });
+}
+
+/** DELETE /api/plans/{id}. Rejects with ApiError status 404 if the plan doesn't exist. */
+export function deletePlan(id: number, signal?: AbortSignal): Promise<void> {
+  return request<void>(`/api/plans/${encodeURIComponent(id)}`, { method: "DELETE", signal });
 }

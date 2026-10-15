@@ -1,0 +1,153 @@
+/* Desktop: content | scoreboard. Narrow: scoreboard strip on top */
+.eatout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-areas: "main score";
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.eatout-score {
+  grid-area: score;
+}
+
+.eatout-main {
+  grid-area: main;
+  min-width: 0;
+  display: grid;
+  gap: var(--space-5);
+  /* Keeps each row's name, role macro and stepper close together */
+  max-width: 620px;
+}
+
+.eatout-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.eatout-controls .segmented {
+  flex: 0 1 auto;
+}
+
+.menu,
+.find {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.menu-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.menu-note {
+  font-size: 14px;
+}
+
+.menu-missing {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  border-left: 3px solid var(--carbs);
+}
+
+.menu-group {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.menu-group-heading {
+  font-size: 14px;
+  font-weight: var(--weight-medium);
+  color: var(--muted);
+}
+
+.menu-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+/* Same row language as the planner timeline */
+.menu-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 40px;
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  border-radius: var(--radius-control);
+}
+
+.menu-row--chosen {
+  background: var(--surface);
+}
+
+.menu-name {
+  overflow-wrap: anywhere;
+}
+
+.stepper {
+  display: inline-grid;
+  grid-template-columns: 32px 28px 32px;
+  align-items: center;
+}
+
+.stepper-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  background: var(--surface-2);
+}
+
+.stepper-button[aria-disabled="true"] {
+  color: var(--muted);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.stepper-count {
+  text-align: center;
+  font-size: 20px;
+}
+
+.find-form {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 420px;
+}
+
+.find-form .button-primary {
+  justify-self: start;
+}
+
+.find-result {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.find-result .menu-row {
+  padding-right: var(--space-3);
+}
+
+.find-result > button {
+  justify-self: start;
+}
+
+@media (max-width: 999px) {
+  .eatout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "score"
+      "main";
+    gap: var(--space-4);
+  }
+}

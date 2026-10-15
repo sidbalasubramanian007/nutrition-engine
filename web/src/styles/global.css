@@ -64,6 +64,12 @@ button:disabled {
   outline: none;
 }
 
+/* Elements focused only by script (e.g. a screen's heading after navigation) never show a ring.
+   Beats :focus-visible on specificity, so real keyboard focus elsewhere keeps its ring. */
+[tabindex="-1"]:focus {
+  outline: none;
+}
+
 /* Big macro numbers: condensed width, heavy weight, tabular figures */
 .number {
   font-stretch: var(--stretch-condensed);
@@ -181,4 +187,65 @@ select {
 
 .form-error {
   color: var(--protein);
+}
+
+/* --- form fields --- */
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.field label,
+.field-group legend {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.field-group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.field-group legend {
+  padding: 0;
+  margin-bottom: var(--space-1);
+}
+
+/* Inactive screens stay mounted (to keep their state) but must never show */
+[hidden] {
+  display: none !important;
+}
+
+.screen-title {
+  font-size: 20px;
+  font-weight: var(--weight-medium);
+}
+
+/* Shared two-part layout: content plus a scoreboard slot that's sticky on the right,
+   or a sticky strip on top on narrow screens */
+.score-slot {
+  min-width: 0;
+  position: sticky;
+  top: var(--space-5);
+}
+
+@media (max-width: 999px) {
+  .score-slot {
+    top: 0;
+    z-index: 1;
+    margin: 0 calc(-1 * var(--space-4));
+    padding: var(--space-2) var(--space-4);
+    background: var(--bg);
+  }
 }

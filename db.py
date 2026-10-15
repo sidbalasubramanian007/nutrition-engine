@@ -144,3 +144,14 @@ def get_plan(plan_id):
     ]
     plan["macros"] = {m: round(sum(item[m] * item["servings"] for item in plan["items"]), 1) for m in MACROS}
     return plan
+
+
+def delete_plan(plan_id):
+    """Deletes a saved plan (its items cascade). Returns False if there was no such plan."""
+    conn = get_connection()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM plans WHERE id = %s RETURNING id;", (plan_id,))
+            return cur.fetchone() is not None
+    finally:
+        conn.close()

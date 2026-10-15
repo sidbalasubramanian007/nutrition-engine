@@ -8,14 +8,14 @@ CORS origins come from ALLOWED_ORIGINS (comma-separated, default http://localhos
 import logging
 import os
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 import calculator
 import db  # loads .env, so ALLOWED_ORIGINS can live there too
 import optimizer
 import solver
-from api.models import (Food, Health, Location, Macros, MealGroup, Plan, PlanItem, PlanRequest, RestaurantRequest,
+from api.models import (Food, Health, Macros, MealGroup, Plan, PlanItem, PlanRequest, RestaurantRequest,
                         SavedPlan, SavedPlanSummary, SavePlanRequest, SavePlanResponse, Targets, TargetsRequest,
                         TargetsResponse)
 
@@ -99,7 +99,7 @@ def health():
 
 
 @app.get("/api/foods", response_model=list[Food])
-def list_foods(location: Location | None = Query(None, description="Only foods from this location"),
+def list_foods(location: str | None = Query(None, description="Only foods from this location (Grocery or a restaurant)"),
                exclude_estimated: bool = False, foods: list = Depends(load_foods)):
     foods = without_estimates(foods, exclude_estimated)
     return [Food(**f) for f in foods if location is None or f["location"] == location]
@@ -127,6 +127,10 @@ def optimize_plan(body: PlanRequest, foods: list = Depends(load_foods)):
 @app.post("/api/restaurant/optimize", response_model=Plan)
 def optimize_restaurant(body: RestaurantRequest, foods: list = Depends(load_foods)):
     menu = [f for f in foods if f["location"] == body.restaurant]
+    if body.restaurant == "Grocery" or not menu:
+        restaurants = sorted({f["location"] for f in foods} - {"Grocery"})
+        raise HTTPException(status_code=422, detail=f"Unknown restaurant {body.restaurant!r}; "
+                                                    f"menus are loaded for {', '.join(restaurants) or 'none'}")
     t = body.targets
     result = optimizer.optimize_restaurant_order(menu, t.calories, t.protein, t.carbs, t.fat)
     return to_plan(result, menu, INFEASIBLE_ORDER)
@@ -173,3 +177,15 @@ def get_saved_plan(plan_id: int):
         meals=group_items(plan["items"], by_name), macros=Macros(**plan["macros"]),
         penalty=plan["penalty"], status=plan["status"], solver=plan["solver"],
     )
+
+
+@app.delete("/api/plans/{plan_id}", status_code=204, response_class=Response)
+def delete_saved_plan(plan_id: int):
+    """Deletes a saved plan and its items. 204 on success, 404 if it doesn't exist."""
+    try:
+        deleted = db.delete_plan(plan_id)
+    except Exception:
+        raise unavailable("Could not delete the plan")
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"No saved plan {plan_id}")
+    return Response(status_code=204)

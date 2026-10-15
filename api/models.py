@@ -4,8 +4,6 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-Location = Literal["Grocery", "Chipotle", "CAVA"]
-Restaurant = Literal["Chipotle", "CAVA"]
 Status = Literal["optimal", "feasible", "infeasible"]
 MealName = Literal["Breakfast", "Lunch", "Dinner", "Snack", "Order"]
 DAILY_MEALS = ("Breakfast", "Lunch", "Dinner", "Snack")
@@ -120,7 +118,7 @@ class PlanRequest(Request):
 
 
 class RestaurantRequest(Request):
-    restaurant: Restaurant
+    restaurant: str = Field(min_length=1, description="A restaurant location from /api/foods, e.g. Chipotle")
     targets: MealTargets
 
 

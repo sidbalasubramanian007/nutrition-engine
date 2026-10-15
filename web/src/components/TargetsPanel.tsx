@@ -1,6 +1,7 @@
 import type { FormEvent } from "react";
 import type { Activity, DailyTargets, Gender, Goal } from "../api.ts";
 import { formatNumber } from "../format.ts";
+import Segmented from "./Segmented.tsx";
 import "./TargetsPanel.css";
 
 export type TargetsMode = "calculate" | "own";
@@ -90,21 +91,13 @@ export default function TargetsPanel(props: Props) {
         <p className="notice" role="alert">The server is running but can't reach its database.</p>
       ) : null}
 
-      <fieldset className="segmented">
-        <legend className="visually-hidden">How to set your targets</legend>
-        {(["calculate", "own"] as const).map((mode) => (
-          <label key={mode} className="segmented-option">
-            <input
-              type="radio"
-              name="targets-mode"
-              value={mode}
-              checked={props.mode === mode}
-              onChange={() => props.onModeChange(mode)}
-            />
-            <span>{mode === "calculate" ? "Calculate for me" : "Set my own"}</span>
-          </label>
-        ))}
-      </fieldset>
+      <Segmented
+        name="targets-mode"
+        legend="How to set your targets"
+        options={[{ value: "calculate", label: "Calculate for me" }, { value: "own", label: "Set my own" }]}
+        value={props.mode}
+        onChange={props.onModeChange}
+      />
 
       <form className="targets-form" onSubmit={submit} noValidate>
         {props.mode === "calculate" ? (

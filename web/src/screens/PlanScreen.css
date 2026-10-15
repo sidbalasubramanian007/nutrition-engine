@@ -1,0 +1,53 @@
+/* Desktop: targets | your day | scoreboard */
+.planner {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 300px;
+  grid-template-areas: "targets day score";
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.planner-targets {
+  grid-area: targets;
+  min-width: 0;
+}
+
+.planner-day {
+  grid-area: day;
+  min-width: 0;
+}
+
+.planner-score {
+  grid-area: score;
+}
+
+.targets-toggle {
+  display: none;
+}
+
+/* Small desktops: slimmer side columns so the day column keeps room for food names */
+@media (min-width: 1000px) and (max-width: 1199px) {
+  .planner {
+    grid-template-columns: 248px minmax(0, 1fr) 264px;
+    gap: var(--space-5);
+  }
+}
+
+/* Narrow: scoreboard becomes a sticky strip on top; targets collapse behind a toggle */
+@media (max-width: 999px) {
+  .planner {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "score"
+      "toggle"
+      "targets"
+      "day";
+    gap: var(--space-4);
+  }
+
+  .targets-toggle {
+    display: block;
+    grid-area: toggle;
+    justify-self: start;
+  }
+}

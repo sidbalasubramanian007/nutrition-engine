@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useId, type CSSProperties } from "react";
 import type { DailyTargets, Macros } from "../api.ts";
 import { barFill, BAR_SCALE, deviationText, formatNumber, type MacroKey } from "../format.ts";
 import "./Scoreboard.css";
@@ -18,15 +18,19 @@ interface Props {
   loading: boolean;
   statusText: string | null;
   statusDetail: string | null;
+  /** Nothing chosen yet: numbers show 0, bars are empty, and this line replaces the deviation lines */
+  emptyMessage?: string | null;
 }
 
-export default function Scoreboard({ macros, targets, loading, statusText, statusDetail }: Props) {
+export default function Scoreboard({ macros, targets, loading, statusText, statusDetail, emptyMessage = null }: Props) {
+  const empty = emptyMessage !== null;
+  const headingId = useId();
   return (
-    <aside className={`scoreboard${loading ? " scoreboard--loading" : ""}`} aria-labelledby="scoreboard-heading">
-      <h2 id="scoreboard-heading" className="panel-heading scoreboard-heading">Your numbers</h2>
+    <aside className={`scoreboard${loading ? " scoreboard--loading" : ""}`} aria-labelledby={headingId}>
+      <h2 id={headingId} className="panel-heading scoreboard-heading">Your numbers</h2>
       <dl className="score-rows">
         {ROWS.map(({ key, label, unit }) => {
-          const achieved = macros?.[key];
+          const achieved = empty ? 0 : macros?.[key];
           const target = targets?.[key];
           const have = achieved !== undefined && target !== undefined;
           return (
@@ -35,19 +39,18 @@ export default function Scoreboard({ macros, targets, loading, statusText, statu
               <dd className="score-value">
                 <span className="number score-number">{have ? formatNumber(achieved) : "–"}</span>
                 <span className="score-unit">{unit}</span>
+                {target !== undefined && <span className="visually-hidden"> (target {formatNumber(target)} {unit})</span>}
               </dd>
               <dd className="score-bar" aria-hidden="true">
-                <span className="score-fill" style={{ width: `${have ? barFill(achieved, target) : 0}%` }} />
+                <span className="score-fill" style={{ width: `${have && !empty ? barFill(achieved, target) : 0}%` }} />
                 <span className="score-tick" style={{ left: TICK_POSITION }} />
               </dd>
-              <dd className="score-deviation">
-                {have ? deviationText(achieved, target, unit) : "No plan yet"}
-                {have && <span className="visually-hidden"> (target {formatNumber(target)} {unit})</span>}
-              </dd>
+              {!empty && <dd className="score-deviation">{have ? deviationText(achieved, target, unit) : "No plan yet"}</dd>}
             </div>
           );
         })}
       </dl>
+      {empty && <p className="score-empty muted">{emptyMessage}</p>}
       {statusText && (
         <p className="score-status">
           {statusText}
