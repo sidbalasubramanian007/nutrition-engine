@@ -4,7 +4,7 @@ Usage (from the repo root; macOS has no `timeout`, the perl line is equivalent):
     timeout 1800 python scripts/benchmark_solvers.py
     perl -e 'alarm shift; exec @ARGV' 1800 python scripts/benchmark_solvers.py
 
-Foods come straight from food_data.csv, data/*.csv and trader_joes_macros.json (no database),
+Foods come straight from food_data.csv, data/seed_*.csv and trader_joes_macros.json (no database),
 merged with setup_db.py's rules, using the grocery pool. For each target it runs:
   - heuristic: solver.run_heuristic_solver, 50,000 iterations, seeded
   - milp_1s:   optimizer.optimize_meal_plan with time_limit=1 and default settings (what the app uses)

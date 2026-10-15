@@ -61,14 +61,14 @@ Their tests remain. The app still uses `solver.load_food_data()` to load foods.
 
 **Data.**
 - `food_data.csv` is the main dataset: grocery staples plus Chipotle and CAVA items, each tagged with a `location`.
-- Curated staples (chicken, salmon, oats, rice, etc.) live in `data/*.csv`.
+- Curated staples (chicken, salmon, oats, rice, etc.) live in `data/seed_*.csv`.
 - `scraper.py` uses Playwright to load a Trader Joe's category page and BeautifulSoup to pull product names. It then uses the Gemini API (`google-genai`) to estimate per-serving macros (calories/protein/carbs/fat/fiber) for each item, and saves the result to `trader_joes_macros.json`.
 
 Every CSV has a `Meal_Slots` column listing the meals a food may appear in, separated by `|` (e.g. `breakfast|snack`); valid slots are `breakfast`, `lunch`, `dinner` and `snack`. Adding a food is a data change only. If `Meal_Slots` is blank, or for Trader Joe's items (which have none), a default applies: restaurant items and `lean_protein` foods go to `lunch|dinner`, and everything else to all four slots. `scripts/setup_db.py` loads `food_data.csv` by default and the other two sources on request.
 
 Every CSV also has a `Component_Type` column. Each restaurant item needs one of `base`, `protein`, `beans`, `topping` or `sauce`, and `setup_db.py` rejects a missing or unknown value. Grocery items leave it blank.
 
-**Database.** Food data lives in PostgreSQL, in a single `products` table defined in `schema.sql`, with columns for name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots and component_type. The app checks the connection at startup and reads this table each time a plan is generated.
+**Database.** Food data lives in PostgreSQL, in a single `products` table defined in `schema.sql`, with columns for name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots, component_type and source. `source` records where a food's macros came from: `manual` (`food_data.csv` and the seed files), `gemini_estimate` (the Trader Joe's items, whose macros are LLM estimates) or `usda` (verified against USDA FoodData Central). The sidebar's **Exclude estimated foods** checkbox leaves `gemini_estimate` foods out of the pool before optimizing. The app checks the connection at startup and reads this table each time a plan is generated.
 
 ## Benchmark
 
@@ -87,7 +87,7 @@ Every CSV also has a `Component_Type` column. Each restaurant item needs one of 
 - The largest penalties come from high-calorie, low-protein targets. The four targets whose best possible penalty is over 1,000 are all 3,188–3,513 kcal with only 95–134g protein. No plan gets close to them, because main-meal servings cap at 3 and the snack at two single servings. These targets pull every method's mean far above its median.
 
 **Method.**
-- **Food pool:** the 39 grocery foods from `food_data.csv`, `data/*.csv` and `trader_joes_macros.json`, merged with `setup_db.py`'s rules and read from the files directly (no database).
+- **Food pool:** the 39 grocery foods from `food_data.csv`, `data/seed_*.csv` and `trader_joes_macros.json`, merged with `setup_db.py`'s rules and read from the files directly (no database).
 - **Targets:** 50, generated with seed 2026:
   - calories uniform in 1,600–3,600;
   - protein 0.7–1.2 g per lb for a random 120–220 lb person;
@@ -135,10 +135,13 @@ See `requirements.txt` and `requirements-dev.txt` for pinned versions.
 | `schema.sql` | Final `products` table schema. Idempotent; also upgrades tables created by the old migration scripts. |
 | `docker-compose.yml` | Local `postgres:16` on host port 5433, configured from the same `DB_*` variables as `db.py`. |
 | `food_data.csv` | Main food dataset (grocery + restaurant items, with restaurant component types), loaded by default. |
-| `data/*.csv` | Curated staple proteins and carbs (same columns as `food_data.csv`), loaded with `--with-seeds`. |
+| `data/seed_*.csv` | Curated staple proteins and carbs (same columns as `food_data.csv`), loaded with `--with-seeds`. |
+| `data/usda_overrides.csv` | USDA-verified macros accepted in `scripts/usda_lookup.py` (created on first accept), applied last by `setup_db.py`. |
 | `trader_joes_macros.json` | Scraper output (Trader Joe's items), loaded with `--with-trader-joes`. |
 | `scripts/setup_db.py` | One-step database setup: applies `schema.sql`, then upserts the food data by name, so it's safe to re-run. |
 | `scripts/check_db.py` | Prints all products in the database, sorted by protein, descending. |
+| `scripts/usda_lookup.py` | Compares grocery foods with USDA FoodData Central and saves accepted values to `data/usda_overrides.csv`. |
+| `scripts/audit_data.py` | Prints products whose labelled calories differ from 4P + 4C + 9F by more than 20% (the `nutrition_audit` view). |
 | `scripts/benchmark_solvers.py` | Heuristic vs. MILP benchmark (see [Benchmark](#benchmark)). Reads the data files directly, with no database needed. |
 | `tests/` | pytest suite for the calculator, `db.py`, `setup_db.py`, the heuristic solver and the optimizer. `conftest.py` puts `scripts/` on the import path. |
 
@@ -210,12 +213,27 @@ This creates the `products` table from `schema.sql` if needed, then upserts ever
 python scripts/setup_db.py --with-seeds --with-trader-joes
 ```
 
-- `--with-seeds` adds the curated staples in `data/*.csv`.
+- `--with-seeds` adds the curated staples in `data/seed_*.csv`.
 - `--with-trader-joes` adds `trader_joes_macros.json`, if it's present.
 
-If the same name appears in more than one source, `food_data.csv` wins over `data/*.csv`, which wins over the Trader Joe's data. Re-running without a flag doesn't remove rows a previous flagged run added. To get back to the default set, recreate the database (with Docker: `docker compose down -v && docker compose up -d --wait`) and run the script again.
+If the same name appears in more than one source, `food_data.csv` wins over `data/seed_*.csv`, which wins over the Trader Joe's data. USDA-verified values from `data/usda_overrides.csv` are applied after that, on every run (see below). Re-running without a flag doesn't remove rows a previous flagged run added. To get back to the default set, recreate the database (with Docker: `docker compose down -v && docker compose up -d --wait`) and run the script again.
 
 To refresh the Trader Joe's data first, run `python scraper.py` (requires `GEMINI_API_KEY`).
+
+**Verify macros against USDA (optional).** `scripts/usda_lookup.py` compares each grocery food with USDA FoodData Central. It needs `USDA_API_KEY` in `.env` ([free key](https://fdc.nal.usda.gov/api-key-signup)).
+
+```bash
+python scripts/usda_lookup.py --dry-run                 # show comparisons only
+python scripts/usda_lookup.py --only "Rolled Oats"      # review one food
+python scripts/usda_lookup.py                           # review every grocery food
+python scripts/setup_db.py --with-seeds --with-trader-joes   # then load accepted values
+```
+
+How the lookup works:
+- **Which database it searches.** Generic foods are searched in Foundation and SR Legacy, which report nutrients per 100 g. You're asked for the gram weight of one serving; the default is USDA's first listed portion, if it has one. Trader Joe's items are searched in USDA's Branded data, which reports per labelled serving, and every word of the name must match. As of writing, none of the Trader Joe's items has a match.
+- **Reviewing candidates.** Each food shows our values next to the USDA candidate's, scaled to one serving. Answer `y` to accept, `n` to skip, a number to view another of the top 5, or `q` to quit. USDA's ranking isn't always right (for "Chicken Breast" the first complete match is breaded tenders), so check the description before accepting.
+- **What gets saved.** Accepted foods are appended to `data/usda_overrides.csv` and skipped on later runs. Restaurant items aren't looked up.
+- **What `setup_db.py` does with them.** It replaces only those foods' calories, protein, carbs, fat and fiber, and sets `source='usda'`; category, meal slots and everything else stay.
 
 You can sanity-check the loaded data with:
 

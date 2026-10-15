@@ -6,7 +6,7 @@ def fetch_products_rows():
     """Runs the products query against Postgres and returns the raw rows."""
     conn = db.get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots, component_type FROM products;")
+    cursor.execute("SELECT name, calories, protein, carbs, fat, fiber, category, max_servings, location, meal_slots, component_type, source FROM products;")
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -28,6 +28,7 @@ def rows_to_foods(rows):
             "location":     row[8],
             "meal_slots":   list(row[9]),
             "component_type": row[10],
+            "source":       row[11],
         })
     return foods
 

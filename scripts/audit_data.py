@@ -5,8 +5,9 @@ Usage (from the repo root, after scripts/setup_db.py):
 
 Reads the nutrition_audit view (see schema.sql), which compares labelled calories with
 4*protein + 4*carbs + 9*fat. Flagged rows are sorted by percent error, largest first. The
-source is the data file each name loads from under setup_db.py's merge rules (the database
-doesn't record it); rows that are in no data file show as "database only".
+source is the data file each name's macros load from under setup_db.py's merge rules,
+including data/usda_overrides.csv, which is applied last; rows that are in no data file
+show as "database only".
 """
 import contextlib
 import io
@@ -28,13 +29,17 @@ ORDER BY percent_error DESC NULLS FIRST, name;
 
 
 def source_by_name():
-    """The data file each product name loads from (later, higher-priority sources win)."""
+    """The data file each product's macros load from (later sources win; USDA overrides last)."""
     with contextlib.redirect_stdout(io.StringIO()):
         sources = setup_db.read_sources(with_seeds=True, with_trader_joes=True)
     winners = {}
     for label, rows in sources:
         for row in rows:
             winners[row["name"]] = label
+    overrides_label = os.path.relpath(setup_db.USDA_OVERRIDES_PATH, setup_db.ROOT)
+    for name in setup_db.read_usda_overrides():
+        if name in winners:
+            winners[name] = overrides_label
     return winners
 
 
