@@ -1,10 +1,14 @@
 import os
 import psycopg2
 from dotenv import load_dotenv
+from psycopg2.extensions import parse_dsn
 
 MACROS = ["calories", "protein", "carbs", "fat", "fiber"]
 
 load_dotenv()
+
+
+LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", ""}
 
 
 def get_connection():
@@ -12,9 +16,16 @@ def get_connection():
 
     Uses DATABASE_URL if set (e.g. hosted Postgres); otherwise builds the connection
     from DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD, with local defaults.
+
+    A DATABASE_URL pointing at a non-local host gets sslmode=require unless it sets its
+    own sslmode (hosted Postgres such as Neon requires SSL). Add ?sslmode=disable to the
+    URL to connect to a server without SSL, e.g. a local database from inside Docker.
     """
     database_url = os.getenv("DATABASE_URL")
     if database_url:
+        params = parse_dsn(database_url)
+        if "sslmode" not in params and params.get("host", "") not in LOCAL_HOSTS:
+            return psycopg2.connect(database_url, sslmode="require")
         return psycopg2.connect(database_url)
     return psycopg2.connect(
         host=os.getenv("DB_HOST", "localhost"),

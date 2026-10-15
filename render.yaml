@@ -1,0 +1,16 @@
+# Render Blueprint: the API as a free Docker web service. See DEPLOY.md.
+services:
+  - type: web
+    name: nutrition-engine-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # Values are entered in the Render dashboard; sync: false keeps them out of this file
+      - key: DATABASE_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false

@@ -22,7 +22,25 @@ def test_database_url_wins_over_individual_vars(monkeypatch, connect_calls):
 
     db.get_connection()
 
-    assert connect_calls == [(("postgresql://u:p@db.example.com:6543/prod",), {})]
+    # A remote host gets SSL by default (hosted Postgres such as Neon requires it)
+    assert connect_calls == [(("postgresql://u:p@db.example.com:6543/prod",), {"sslmode": "require"})]
+
+
+@pytest.mark.parametrize("url, kwargs", [
+    # Neon-style URL that already asks for SSL: passed through untouched
+    ("postgresql://u:p@ep-cool-name.us-east-2.aws.neon.tech/neondb?sslmode=require", {}),
+    # An explicit sslmode always wins, e.g. a local database reached from inside Docker
+    ("postgresql://u:p@host.docker.internal:5433/nutrition_db?sslmode=disable", {}),
+    # Local hosts don't get SSL forced on them
+    ("postgresql://u:p@localhost:5433/nutrition_db", {}),
+    ("postgresql://u:p@127.0.0.1/nutrition_db", {}),
+    # Remote host without sslmode: SSL required
+    ("postgresql://u:p@ep-cool-name.us-east-2.aws.neon.tech/neondb", {"sslmode": "require"}),
+])
+def test_database_url_ssl_defaults(monkeypatch, connect_calls, url, kwargs):
+    monkeypatch.setenv("DATABASE_URL", url)
+    db.get_connection()
+    assert connect_calls == [((url,), kwargs)]
 
 
 def test_individual_vars_are_passed_when_database_url_unset(monkeypatch, connect_calls):

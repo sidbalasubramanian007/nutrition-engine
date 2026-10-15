@@ -4,6 +4,10 @@ Usage (from the repo root):
     python scripts/setup_db.py                     # food_data.csv only
     python scripts/setup_db.py --with-seeds        # + curated staples in data/seed_*.csv
     python scripts/setup_db.py --with-trader-joes  # + trader_joes_macros.json (scraper output)
+    python scripts/setup_db.py --with-all          # both of the above (the full food pool)
+
+The database comes from db.get_connection(): DATABASE_URL (with SSL for hosted databases such
+as Neon) or the DB_* variables.
 
 Rows are upserted by name. When the same name appears in more than one source,
 food_data.csv wins over the seed files, which win over the Trader Joe's data.
@@ -244,9 +248,14 @@ def setup(with_seeds=False, with_trader_joes=False):
     print(f"Upserted {len(products)} products. Table now has {total} rows.")
 
 
-if __name__ == "__main__":
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--with-seeds", action="store_true", help="also load the curated staples in data/seed_*.csv")
     parser.add_argument("--with-trader-joes", action="store_true", help="also load trader_joes_macros.json if present")
-    args = parser.parse_args()
-    setup(with_seeds=args.with_seeds, with_trader_joes=args.with_trader_joes)
+    parser.add_argument("--with-all", action="store_true", help="shortcut for --with-seeds --with-trader-joes")
+    args = parser.parse_args(argv)
+    setup(with_seeds=args.with_seeds or args.with_all, with_trader_joes=args.with_trader_joes or args.with_all)
+
+
+if __name__ == "__main__":
+    main()

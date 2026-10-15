@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiError,
-  getHealth,
   optimizePlan,
   savePlan,
   type DailyMeal,
@@ -9,6 +8,7 @@ import {
   type LockedItem,
   type Plan,
 } from "./api.ts";
+import { sharedHealth } from "./health.ts";
 
 /** Time budget the app gives the solver (seconds). */
 export const PLAN_TIME_LIMIT = 1;
@@ -48,17 +48,19 @@ export function usePlanner() {
   const inFlight = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    const controller = new AbortController();
-    getHealth(controller.signal)
+    let active = true;
+    sharedHealth()
       .then((health) => {
+        if (!active) return;
         setUnreachable(false);
         setDbDown(!health.db);
       })
       .catch((e: unknown) => {
-        if (e instanceof DOMException && e.name === "AbortError") return;
-        setUnreachable(describeError(e).unreachable);
+        if (active) setUnreachable(describeError(e).unreachable);
       });
-    return () => controller.abort();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const run = useCallback(

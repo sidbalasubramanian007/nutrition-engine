@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { DayTargetsProvider } from "./dayTargets.tsx";
+import { useServerWaking } from "./health.ts";
 import { useHashRoute, type Route } from "./router.ts";
 import EatOutScreen from "./screens/EatOutScreen.tsx";
 import PlanScreen from "./screens/PlanScreen.tsx";
@@ -14,6 +15,7 @@ const LINKS: { route: Route; label: string }[] = [
 
 export default function App() {
   const route = useHashRoute();
+  const waking = useServerWaking();
   const firstRender = useRef(true);
 
   // After navigating (not on first load), move focus to the new screen's heading
@@ -37,6 +39,10 @@ export default function App() {
               </a>
             ))}
           </nav>
+          {/* The free API host sleeps when idle; say so if the first health check is slow */}
+          <p className="waking muted" role="status">
+            {waking ? "Waking up the server, this can take up to a minute on the free tier." : ""}
+          </p>
         </header>
 
         {/* Every screen stays mounted so its state survives navigation; inactive ones are hidden */}

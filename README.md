@@ -138,6 +138,7 @@ See `requirements.txt` and `requirements-dev.txt` for pinned versions.
 | `scraper.py` | Scrapes a Trader Joe's category page with Playwright/BeautifulSoup, then calls the Gemini API to estimate nutrition macros for each item and writes `trader_joes_macros.json`. |
 | `db.py` | Shared `get_connection()` helper. Opens the Postgres connection from `DATABASE_URL` if set, otherwise from `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` (with local defaults). Used by `app.py`, `solver.py`, `scripts/setup_db.py` and `scripts/check_db.py`. |
 | `schema.sql` | Final `products` table schema. Idempotent; also upgrades tables created by the old migration scripts. |
+| `Dockerfile`, `render.yaml` | API image (python:3.12-slim, runtime requirements only) and the Render Blueprint for it. See [DEPLOY.md](DEPLOY.md). |
 | `docker-compose.yml` | Local `postgres:16` on host port 5433, configured from the same `DB_*` variables as `db.py`. |
 | `food_data.csv` | Main food dataset (grocery + restaurant items, with restaurant component types), loaded by default. |
 | `data/seed_*.csv` | Curated staple proteins and carbs (same columns as `food_data.csv`), loaded with `--with-seeds`. |
@@ -304,6 +305,10 @@ npm run dev
 ```
 
 The frontend reads the API's address from `VITE_API_URL` (default `http://127.0.0.1:8000`; see `web/.env.example`). The API only accepts browser requests from origins in `ALLOWED_ORIGINS` (default `http://localhost:5173`). If you change either port or host, update both. See [web/README.md](web/README.md) for the frontend's scripts and design rules.
+
+## Deploying
+
+See [DEPLOY.md](DEPLOY.md) for the step-by-step guide: Neon for the database, Render for the API (`Dockerfile`, `render.yaml`) and Vercel for the web app (`web/vercel.json`), plus which environment variable goes where.
 
 ## Running the tests
 

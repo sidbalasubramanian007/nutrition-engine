@@ -99,3 +99,17 @@ def test_overrides_file_is_not_read_as_a_seed_file(small_sources):
     (small_sources / "data" / "usda_overrides.csv").write_text(OVERRIDES_HEADER + "Oats,140,5,24,2.5,4,1,40\n")
     labels = [label for label, _ in setup_db.read_sources(with_seeds=True, with_trader_joes=False)]
     assert labels == ["data/seed_proteins.csv", "food_data.csv"]
+
+
+
+@pytest.mark.parametrize("argv, expected", [
+    ([], {"with_seeds": False, "with_trader_joes": False}),
+    (["--with-seeds"], {"with_seeds": True, "with_trader_joes": False}),
+    (["--with-all"], {"with_seeds": True, "with_trader_joes": True}),
+    (["--with-trader-joes", "--with-all"], {"with_seeds": True, "with_trader_joes": True}),
+])
+def test_command_line_flags(monkeypatch, argv, expected):
+    calls = []
+    monkeypatch.setattr(setup_db, "setup", lambda **kwargs: calls.append(kwargs))
+    setup_db.main(argv)
+    assert calls == [expected]

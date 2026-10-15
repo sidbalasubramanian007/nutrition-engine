@@ -1,0 +1,23 @@
+# Keep secrets, local environments and anything the API doesn't need out of the image
+.env
+.env.*
+!.env.example
+.git
+.github
+venv/
+__pycache__/
+*.pyc
+web/
+tests/
+conftest.py
+pytest.ini
+requirements-dev.txt
+benchmark_results.json
+docker-compose.yml
+Dockerfile
+.dockerignore
+render.yaml
+*.md
+.vscode/
+.idea/
+.DS_Store
