@@ -1,8 +1,34 @@
 # Nutrition Engine (Macro-Tracker)
 
+**Live demo: [nutrition-engine-nine.vercel.app](https://nutrition-engine-nine.vercel.app).** The first request can take up to a minute while the free-tier API wakes up.
+
 [![Tests](https://github.com/sidbalasubramanian007/nutrition-engine/actions/workflows/tests.yml/badge.svg)](https://github.com/sidbalasubramanian007/nutrition-engine/actions/workflows/tests.yml)
 
-A Streamlit app that builds a full daily meal plan from real food data (grocery staples, Trader Joe's products, and Chipotle/CAVA menu items) matched against user-defined macro targets (calories, protein, carbs, fat). Instead of pulling from a generic recipe database, it works off per-serving nutrition data and solves for the combination of real items that best hits your numbers.
+A meal planner that builds a full day of meals from real food data (grocery staples, Trader Joe's products, and Chipotle/CAVA menu items) matched against your macro targets (calories, protein, carbs, fat). Instead of pulling from a generic recipe database, it works off per-serving nutrition data and solves for the combination of real items that best hits your numbers.
+
+## Architecture
+
+```
+Browser ── React + TypeScript web app (Vercel)
+              │  HTTPS, JSON
+              ▼
+           FastAPI backend (Docker on Render) ── optimizer.py · solver.py · calculator.py · db.py
+              │  SQL over SSL
+              ▼
+           PostgreSQL (Neon)
+```
+
+- **Frontend:** a React + TypeScript single-page app built with Vite (`web/`), hosted on **Vercel**. It has three screens: Plan my day, Eat out and Saved plans. It talks to the API through a typed client, and `VITE_API_URL` is its only setting.
+- **Backend:** a **FastAPI** service (`api/`), packaged with the `Dockerfile` and hosted on **Render**'s free tier (`render.yaml`). It imports the same Python modules as everything else: the MILP optimizer, the heuristic baseline, the target calculator and the database helpers.
+- **Database:** **Neon** serverless PostgreSQL, created from `schema.sql` and loaded by `scripts/setup_db.py`. Locally, the same schema runs in Docker Compose.
+- **Data pipeline:** scripts in `scripts/` load and check the food data from the files in the repo. They aren't part of the running app.
+- **Streamlit:** the original app (`app.py`) still runs locally against the same modules and database.
+
+See [DEPLOY.md](DEPLOY.md) for how the three hosted pieces fit together.
+
+## Known limitations
+
+- **The CAVA menu is partial and unverified.** cava.com blocks automated access with a bot challenge, so its 7 menu items are earlier manual entries that couldn't be checked against CAVA's official data. **Chipotle's menu is complete from Chipotle's official menu API** (the data behind chipotle.com's nutrition calculator), except Queso, for which Chipotle publishes no complete values. Each Chipotle row records its source URL.
 
 ## How it works
 
@@ -113,11 +139,13 @@ It prints one progress line per target and then the summary. Results are written
 ## Tech stack
 
 - **Python 3.12** (the version CI tests against)
-- **Streamlit**: UI (`app.py`)
+- **React** + **TypeScript** + **Vite**: web app (`web/`), plain CSS with design tokens
+- **Streamlit**: original UI (`app.py`)
 - **FastAPI** + **uvicorn**: HTTP API (`api/`), with Pydantic models for every request and response
 - **PuLP 3.3.2**: MILP modeling (`optimizer.py`); its bundled CBC solver is the fallback
 - **HiGHS** (`highspy`): the default MILP solver
-- **PostgreSQL** + **psycopg2**: food data storage (local Postgres via Docker Compose)
+- **PostgreSQL** + **psycopg2**: food data storage (Neon in production, Docker Compose locally)
+- **Hosting**: Vercel (web app), Render (API, Docker), Neon (database)
 - **Playwright** + **BeautifulSoup4**: scraping Trader Joe's product listings (`scraper.py`)
 - **google-genai** (Gemini API): LLM-based macro estimation for scraped items
 - **python-dotenv**: loads database settings and `GEMINI_API_KEY` from a local `.env` file
